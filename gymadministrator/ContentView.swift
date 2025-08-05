@@ -1379,31 +1379,77 @@ struct AdminDashboard: View {
     @State private var showingMiembros = false
     
     var body: some View {
-        NavigationView {
-            ScrollView {
-                VStack(spacing: 20) {
-                    // Header con información del usuario
-                    HeaderCard(authManager: authManager, dashboardManager: dashboardManager, miembroManager: miembroManager)
-                    
-                    // Información de membresía
-                    MembershipInfoCard(dashboardManager: dashboardManager)
-                    
-                    CalendarNotification()
-                    
-                    // Calendario y excusas - ACTUALIZADO
-                    //CalendarExcusesCard()
-                    
-                    Spacer(minLength: 20)
-                }
-                .padding()
+        let isIPad = UIDevice.current.userInterfaceIdiom == .pad
+        
+        if isIPad {
+            // Para iPad: No usar NavigationView anidado, usar NavigationStack directo
+            NavigationStack {
+                iPadDashboardContent
             }
+        } else {
+            // Para iPhone: Mantener NavigationView
+            NavigationView {
+                iPhoneDashboardContent
+            }
+            .navigationViewStyle(.stack)
+        }
+    }
+    
+    // MARK: - iPad Content
+    private var iPadDashboardContent: some View {
+        GeometryReader { geometry in
+            let screenWidth = geometry.size.width
+            let screenHeight = geometry.size.height
+            let isLandscape = screenWidth > screenHeight
+            
+            ScrollView {
+                if isLandscape {
+                    // iPad Landscape - 2 columnas
+                    HStack(alignment: .top, spacing: 30) {
+                        // Columna izquierda
+                        VStack(spacing: 25) {
+                            HeaderCard(authManager: authManager, dashboardManager: dashboardManager, miembroManager: miembroManager)
+                            MembershipInfoCard(dashboardManager: dashboardManager)
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: screenWidth * 0.45)
+                        
+                        // Columna derecha
+                        VStack(spacing: 25) {
+                            CalendarNotification()
+                            Spacer(minLength: 0)
+                        }
+                        .frame(maxWidth: screenWidth * 0.45)
+                    }
+                    .padding(.horizontal, 40)
+                    .padding(.top, 30)
+                    .frame(minHeight: screenHeight - 150)
+                } else {
+                    // iPad Portrait - Layout vertical optimizado
+                    VStack(spacing: 30) {
+                        HeaderCard(authManager: authManager, dashboardManager: dashboardManager, miembroManager: miembroManager)
+                        
+                        MembershipInfoCard(dashboardManager: dashboardManager)
+                        
+                        CalendarNotification()
+                        
+                        Spacer(minLength: 30)
+                    }
+                    .padding(.horizontal, 50)
+                    .padding(.top, 30)
+                    .frame(minWidth: screenWidth)
+                }
+            }
+            .background(Color.brandBlack)
             .navigationTitle("Gym Body Gold")
+            .navigationBarTitleDisplayMode(.large)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Cerrar Sesión") {
                         authManager.signOut()
                     }
                     .foregroundColor(.brandGold)
+                    .font(.body)
                 }
             }
             .onAppear {
@@ -1412,6 +1458,36 @@ struct AdminDashboard: View {
             .sheet(isPresented: $showingMiembros) {
                 MiembrosListView()
             }
+        }
+    }
+    
+    // MARK: - iPhone Content
+    private var iPhoneDashboardContent: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                HeaderCard(authManager: authManager, dashboardManager: dashboardManager, miembroManager: miembroManager)
+                MembershipInfoCard(dashboardManager: dashboardManager)
+                CalendarNotification()
+                Spacer(minLength: 20)
+            }
+            .padding()
+        }
+        .background(Color.brandBlack)
+        .navigationTitle("Gym Body Gold")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button("Cerrar Sesión") {
+                    authManager.signOut()
+                }
+                .foregroundColor(.brandGold)
+            }
+        }
+        .onAppear {
+            dashboardManager.loadDashboardData()
+        }
+        .sheet(isPresented: $showingMiembros) {
+            MiembrosListView()
         }
     }
 }
