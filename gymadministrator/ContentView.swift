@@ -10,6 +10,8 @@ import FirebaseCore
 import FirebaseAuth
 import Firebase
 
+
+
 extension Color {
     // Colores principales de Gym Body Gold
     static let brandGold = Color(red: 1.0, green: 0.75, blue: 0.2)      // #FFBF33 - Dorado principal
@@ -1407,12 +1409,12 @@ struct AdminDashboard: View {
                     // iPad Landscape - 2 columnas
                     HStack(alignment: .top, spacing: 30) {
                         // Columna izquierda
-                        VStack(spacing: 25) {
+                        /*VStack(spacing: 25) {
                             HeaderCard(authManager: authManager, dashboardManager: dashboardManager, miembroManager: miembroManager)
                             MembershipInfoCard(dashboardManager: dashboardManager)
                             Spacer(minLength: 0)
                         }
-                        .frame(maxWidth: screenWidth * 0.45)
+                        .frame(maxWidth: screenWidth * 0.45)*/
                         
                         // Columna derecha
                         VStack(spacing: 25) {
@@ -1429,7 +1431,7 @@ struct AdminDashboard: View {
                     VStack(spacing: 30) {
                         HeaderCard(authManager: authManager, dashboardManager: dashboardManager, miembroManager: miembroManager)
                         
-                        MembershipInfoCard(dashboardManager: dashboardManager)
+                        //MembershipInfoCard(dashboardManager: dashboardManager)
                         
                         CalendarNotification()
                         
@@ -1466,7 +1468,7 @@ struct AdminDashboard: View {
         ScrollView {
             VStack(spacing: 20) {
                 HeaderCard(authManager: authManager, dashboardManager: dashboardManager, miembroManager: miembroManager)
-                MembershipInfoCard(dashboardManager: dashboardManager)
+                /*MembershipInfoCard(dashboardManager: dashboardManager)*/
                 CalendarNotification()
                 Spacer(minLength: 20)
             }
@@ -1940,15 +1942,20 @@ struct ClassFormView: View {
 
 struct CalendarNotification: View {
     @StateObject private var classesManager = ClassesExcusesManager()
+    @StateObject private var notificationManager = NotificationManager()
     @State private var selectedTab = 0
     @State private var showCalendarView = false
     @State private var showExcuseForm = false
     @State private var showClassForm = false
     @State private var selectedClass: GymClass?
     
+    // Tabs para el selector - COMENTADAS las de clases y excusas
+    private let tabs = ["Notificaciones"] //, "Clases", "Excusas"]
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             headerSection
+            // tabSelector - COMENTADO ya que solo tenemos una tab
             contentSection
                 .animation(.easeInOut(duration: 0.3), value: selectedTab)
         }
@@ -2009,10 +2016,24 @@ struct CalendarNotification: View {
                         .fill(Color.brandGold.opacity(0.2))
                         .frame(width: 40, height: 40)
                     
-                    Image(systemName: "bell.badge")
+                    Image(systemName: "bell.badge.fill")
                         .foregroundColor(.brandGold)
                         .font(.title3)
                         .fontWeight(.semibold)
+                    
+                    // Badge de notificaciones no leídas
+                    if notificationManager.unreadCount > 0 {
+                        Circle()
+                            .fill(Color.brandError)
+                            .frame(width: 16, height: 16)
+                            .overlay(
+                                Text("\(notificationManager.unreadCount)")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                            )
+                            .offset(x: 12, y: -12)
+                    }
                 }
                 
                 VStack(alignment: .leading, spacing: 2) {
@@ -2021,48 +2042,127 @@ struct CalendarNotification: View {
                         .fontWeight(.bold)
                         .foregroundColor(.brandWhite)
                     
-                    if classesManager.isLoading {
-                        Text("Cargando...")
-                            .font(.caption)
-                            .foregroundColor(.brandLight.opacity(0.8))
-                    } else {
-                        Text("¡Eventos y mucho más!")
-                            .font(.caption)
-                            .foregroundColor(.brandLight.opacity(0.8))
-                    }
+                    Text(notificationManager.notifications.isEmpty ?
+                         "No hay notificaciones" :
+                         "\(notificationManager.notifications.count) notificaciones")
+                        .font(.caption)
+                        .foregroundColor(.brandLight.opacity(0.8))
                 }
             }
             
             Spacer()
+            
+            // Menú de opciones para notificaciones
+            /*Menu {
+                Button("Agregar notificación de prueba") {
+                    notificationManager.addTestNotification()
+                }
+                
+                if !notificationManager.notifications.isEmpty {
+                    Divider()
+                    
+                    Button("Marcar todas como leídas") {
+                        notificationManager.markAllAsRead()
+                    }
+                    
+                    Button("Limpiar todas", role: .destructive) {
+                        notificationManager.clearAllNotifications()
+                    }
+                }
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .foregroundColor(.brandLight)
+                    .font(.title3)
+            }*/
         }
         .padding(.horizontal, 20)
         .padding(.top, 20)
-        .padding(.bottom, 15)
+        .padding(.bottom, 15) // Aumentado el padding ya que no hay tabs
     }
     
-    // MARK: - Content Section
+    // MARK: - Tab Selector - COMENTADO
+    /*
+    private var tabSelector: some View {
+        HStack(spacing: 0) {
+            ForEach(Array(tabs.enumerated()), id: \.offset) { index, tab in
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        selectedTab = index
+                    }
+                }) {
+                    VStack(spacing: 4) {
+                        Text(tab)
+                            .font(.caption)
+                            .fontWeight(selectedTab == index ? .semibold : .medium)
+                            .foregroundColor(selectedTab == index ? .brandGold : .brandLight.opacity(0.7))
+                        
+                        Rectangle()
+                            .fill(selectedTab == index ? Color.brandGold : Color.clear)
+                            .frame(height: 2)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.bottom, 15)
+    }
+    */
+    
+    // MARK: - Content Section - SIMPLIFICADO
     private var contentSection: some View {
         VStack(spacing: 0) {
-            if selectedTab == 0 {
-                upcomingClassesSection
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .leading).combined(with: .opacity),
-                        removal: .move(edge: .trailing).combined(with: .opacity)
-                    ))
-            } else {
-                excusesSection
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity),
-                        removal: .move(edge: .leading).combined(with: .opacity)
-                    ))
-            }
+            // Solo mostrar la sección de notificaciones
+            notificationsSection
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 20)
         .frame(minHeight: 160)
     }
     
-    // MARK: - Upcoming Classes Section
+    // MARK: - Notifications Section
+    private var notificationsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if notificationManager.notifications.isEmpty {
+                emptyNotificationsView
+            } else {
+                ForEach(notificationManager.notifications.prefix(5)) { notification in // Aumentado a 5 notificaciones
+                    NotificationCardView(
+                        notification: notification,
+                        onRead: {
+                            notificationManager.markAsRead(notification)
+                        },
+                        onDelete: {
+                            withAnimation(.easeInOut) {
+                                notificationManager.deleteNotification(notification)
+                            }
+                        }
+                    )
+                    .transition(.scale.combined(with: .opacity))
+                }
+                
+                if notificationManager.notifications.count > 5 {
+                    Button(action: {
+                        // Mostrar vista completa de notificaciones
+                        showCalendarView = true
+                    }) {
+                        HStack {
+                            Text("Ver todas las notificaciones (\(notificationManager.notifications.count))")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                            Image(systemName: "arrow.right")
+                                .font(.caption2)
+                        }
+                        .foregroundColor(.brandLight)
+                        .padding(.top, 8)
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - Upcoming Classes Section - COMENTADO
+    /*
     private var upcomingClassesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             if classesManager.isLoading {
@@ -2091,7 +2191,7 @@ struct CalendarNotification: View {
                         showCalendarView = true
                     }) {
                         HStack {
-                            Text("Ver todas las notificaciones (\(classesManager.upcomingClasses.count))")
+                            Text("Ver todas las clases (\(classesManager.upcomingClasses.count))")
                                 .font(.caption)
                                 .fontWeight(.medium)
                             Image(systemName: "arrow.right")
@@ -2104,8 +2204,10 @@ struct CalendarNotification: View {
             }
         }
     }
+    */
     
-    // MARK: - Excuses Section
+    // MARK: - Excuses Section - COMENTADO
+    /*
     private var excusesSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             if classesManager.pendingExcuses.isEmpty {
@@ -2134,6 +2236,7 @@ struct CalendarNotification: View {
             }
         }
     }
+    */
     
     // MARK: - Helper Views
     private var loadingView: some View {
@@ -2150,6 +2253,35 @@ struct CalendarNotification: View {
         .padding(.vertical, 20)
     }
     
+    private var emptyNotificationsView: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "bell.slash")
+                .font(.system(size: 32))
+                .foregroundColor(.brandLight.opacity(0.6))
+            
+            Text("No hay notificaciones")
+                .font(.subheadline)
+                .fontWeight(.medium)
+                .foregroundColor(.brandLight.opacity(0.8))
+            
+            Text("Las notificaciones push aparecerán aquí")
+                .font(.caption)
+                .foregroundColor(.brandGray)
+                .multilineTextAlignment(.center)
+            
+            /*Button("Agregar Prueba") {
+                notificationManager.addTestNotification()
+            }
+            .font(.caption)
+            .foregroundColor(.brandGold)
+            .padding(.top, 8)*/
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 20)
+    }
+    
+    // MARK: - Helper Views - COMENTADAS
+    /*
     private var emptyClassesView: some View {
         VStack(spacing: 12) {
             Image(systemName: "calendar.badge.plus")
@@ -2196,6 +2328,7 @@ struct CalendarNotification: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
     }
+    */
 }
 
 // MARK: - Calendar and Excuses Card

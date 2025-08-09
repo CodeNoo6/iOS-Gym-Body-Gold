@@ -7,14 +7,14 @@
 
 import SwiftUI
 import Firebase
+import FirebaseCore
+import FirebaseMessaging
+import UserNotifications
+import SwiftUI
 
 @main
 struct gymadministratorApp: App {
-    
-    init() {
-        FirebaseApp.configure()
-    }
-    
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var delegate
     var body: some Scene {
         WindowGroup {
             ContentView()
