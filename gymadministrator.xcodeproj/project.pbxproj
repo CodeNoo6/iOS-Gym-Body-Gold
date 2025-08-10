@@ -10,6 +10,11 @@
 		A06435BC2E340A0F00A343B2 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A06435BB2E340A0F00A343B2 /* GoogleService-Info.plist */; };
 		C97FFB222E47EE5C007EA53B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB212E47EE5C007EA53B /* AppDelegate.swift */; };
 		C97FFB242E480EE3007EA53B /* NotificationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB232E480EE3007EA53B /* NotificationModel.swift */; };
+		C97FFB2D2E483940007EA53B /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB2C2E483940007EA53B /* Settings.swift */; };
+		C97FFB2F2E483EA5007EA53B /* OnBoardingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB2E2E483EA5007EA53B /* OnBoardingScreen.swift */; };
+		C97FFB322E483F15007EA53B /* LoginScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB312E483F15007EA53B /* LoginScreen.swift */; };
+		C97FFB342E483F69007EA53B /* HomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB332E483F69007EA53B /* HomeScreen.swift */; };
+		C97FFB372E483FA9007EA53B /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB362E483FA9007EA53B /* Components.swift */; };
 		C9D8105C2E326BCB00599272 /* gymadministratorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D8105B2E326BCB00599272 /* gymadministratorApp.swift */; };
 		C9D8105E2E326BCB00599272 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D8105D2E326BCB00599272 /* ContentView.swift */; };
 		C9D810602E326BCD00599272 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C9D8105F2E326BCD00599272 /* Assets.xcassets */; };
@@ -66,6 +71,11 @@
 		C97FFB202E47CE58007EA53B /* gymadministrator.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = gymadministrator.entitlements; sourceTree = "<group>"; };
 		C97FFB212E47EE5C007EA53B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		C97FFB232E480EE3007EA53B /* NotificationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationModel.swift; sourceTree = "<group>"; };
+		C97FFB2C2E483940007EA53B /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
+		C97FFB2E2E483EA5007EA53B /* OnBoardingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnBoardingScreen.swift; sourceTree = "<group>"; };
+		C97FFB312E483F15007EA53B /* LoginScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginScreen.swift; sourceTree = "<group>"; };
+		C97FFB332E483F69007EA53B /* HomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreen.swift; sourceTree = "<group>"; };
+		C97FFB362E483FA9007EA53B /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		C9D810582E326BCB00599272 /* gymadministrator.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = gymadministrator.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C9D8105B2E326BCB00599272 /* gymadministratorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = gymadministratorApp.swift; sourceTree = "<group>"; };
 		C9D8105D2E326BCB00599272 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -129,6 +139,61 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		C97FFB262E4819CA007EA53B /* models */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = models;
+			sourceTree = "<group>";
+		};
+		C97FFB272E4819D2007EA53B /* screens */ = {
+			isa = PBXGroup;
+			children = (
+				C97FFB302E483F06007EA53B /* loginScreens */,
+				C97FFB2E2E483EA5007EA53B /* OnBoardingScreen.swift */,
+				C97FFB332E483F69007EA53B /* HomeScreen.swift */,
+			);
+			path = screens;
+			sourceTree = "<group>";
+		};
+		C97FFB282E4834D1007EA53B /* services */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = services;
+			sourceTree = "<group>";
+		};
+		C97FFB292E4834D8007EA53B /* utils */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			path = utils;
+			sourceTree = "<group>";
+		};
+		C97FFB2B2E4834EE007EA53B /* settings */ = {
+			isa = PBXGroup;
+			children = (
+				C97FFB2C2E483940007EA53B /* Settings.swift */,
+			);
+			path = settings;
+			sourceTree = "<group>";
+		};
+		C97FFB302E483F06007EA53B /* loginScreens */ = {
+			isa = PBXGroup;
+			children = (
+				C97FFB312E483F15007EA53B /* LoginScreen.swift */,
+			);
+			path = loginScreens;
+			sourceTree = "<group>";
+		};
+		C97FFB352E483F9B007EA53B /* components */ = {
+			isa = PBXGroup;
+			children = (
+				C97FFB362E483FA9007EA53B /* Components.swift */,
+			);
+			path = components;
+			sourceTree = "<group>";
+		};
 		C9D8104F2E326BCB00599272 = {
 			isa = PBXGroup;
 			children = (
@@ -153,6 +218,12 @@
 		C9D8105A2E326BCB00599272 /* gymadministrator */ = {
 			isa = PBXGroup;
 			children = (
+				C97FFB352E483F9B007EA53B /* components */,
+				C97FFB2B2E4834EE007EA53B /* settings */,
+				C97FFB292E4834D8007EA53B /* utils */,
+				C97FFB282E4834D1007EA53B /* services */,
+				C97FFB272E4819D2007EA53B /* screens */,
+				C97FFB262E4819CA007EA53B /* models */,
 				C97FFB202E47CE58007EA53B /* gymadministrator.entitlements */,
 				A06435BB2E340A0F00A343B2 /* GoogleService-Info.plist */,
 				C9E4EF1C2E331E1000CCE3D8 /* Info.plist */,
@@ -361,10 +432,15 @@
 			files = (
 				C97FFB242E480EE3007EA53B /* NotificationModel.swift in Sources */,
 				C9E4EF192E32D2DB00CCE3D8 /* FirebaseModels.swift in Sources */,
+				C97FFB372E483FA9007EA53B /* Components.swift in Sources */,
+				C97FFB322E483F15007EA53B /* LoginScreen.swift in Sources */,
 				C9D8105E2E326BCB00599272 /* ContentView.swift in Sources */,
 				C9E4EF1B2E32D2F300CCE3D8 /* MiembrosViews.swift in Sources */,
+				C97FFB2F2E483EA5007EA53B /* OnBoardingScreen.swift in Sources */,
+				C97FFB342E483F69007EA53B /* HomeScreen.swift in Sources */,
 				C97FFB222E47EE5C007EA53B /* AppDelegate.swift in Sources */,
 				C9D8105C2E326BCB00599272 /* gymadministratorApp.swift in Sources */,
+				C97FFB2D2E483940007EA53B /* Settings.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
