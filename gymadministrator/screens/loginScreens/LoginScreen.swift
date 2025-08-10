@@ -7,6 +7,9 @@
 
 import Foundation
 import SwiftUI
+import FirebaseCore
+import FirebaseAuth
+import Firebase
 
 // MARK: - AuthManager
 @MainActor

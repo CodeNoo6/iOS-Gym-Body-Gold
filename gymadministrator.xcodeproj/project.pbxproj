@@ -10,7 +10,7 @@
 		A06435BC2E340A0F00A343B2 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = A06435BB2E340A0F00A343B2 /* GoogleService-Info.plist */; };
 		C97FFB222E47EE5C007EA53B /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB212E47EE5C007EA53B /* AppDelegate.swift */; };
 		C97FFB242E480EE3007EA53B /* NotificationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB232E480EE3007EA53B /* NotificationModel.swift */; };
-		C97FFB2D2E483940007EA53B /* Settings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB2C2E483940007EA53B /* Settings.swift */; };
+		C97FFB2D2E483940007EA53B /* ThemeGeneralSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB2C2E483940007EA53B /* ThemeGeneralSettings.swift */; };
 		C97FFB2F2E483EA5007EA53B /* OnBoardingScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB2E2E483EA5007EA53B /* OnBoardingScreen.swift */; };
 		C97FFB322E483F15007EA53B /* LoginScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB312E483F15007EA53B /* LoginScreen.swift */; };
 		C97FFB342E483F69007EA53B /* HomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB332E483F69007EA53B /* HomeScreen.swift */; };
@@ -45,8 +45,8 @@
 		C9D810B22E326C6400599272 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = C9D810B12E326C6400599272 /* FirebaseStorage */; };
 		C9D810B42E326C6400599272 /* FirebaseStorageCombine-Community in Frameworks */ = {isa = PBXBuildFile; productRef = C9D810B32E326C6400599272 /* FirebaseStorageCombine-Community */; };
 		C9D810B62E326C6400599272 /* FirebaseVertexAI-Preview in Frameworks */ = {isa = PBXBuildFile; productRef = C9D810B52E326C6400599272 /* FirebaseVertexAI-Preview */; };
-		C9E4EF192E32D2DB00CCE3D8 /* FirebaseModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E4EF182E32D2DB00CCE3D8 /* FirebaseModels.swift */; };
-		C9E4EF1B2E32D2F300CCE3D8 /* MiembrosViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E4EF1A2E32D2F300CCE3D8 /* MiembrosViews.swift */; };
+		C9E4EF192E32D2DB00CCE3D8 /* FirebaseModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E4EF182E32D2DB00CCE3D8 /* FirebaseModel.swift */; };
+		C9E4EF1B2E32D2F300CCE3D8 /* MiembroScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E4EF1A2E32D2F300CCE3D8 /* MiembroScreen.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -71,7 +71,7 @@
 		C97FFB202E47CE58007EA53B /* gymadministrator.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = gymadministrator.entitlements; sourceTree = "<group>"; };
 		C97FFB212E47EE5C007EA53B /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		C97FFB232E480EE3007EA53B /* NotificationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NotificationModel.swift; sourceTree = "<group>"; };
-		C97FFB2C2E483940007EA53B /* Settings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Settings.swift; sourceTree = "<group>"; };
+		C97FFB2C2E483940007EA53B /* ThemeGeneralSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeGeneralSettings.swift; sourceTree = "<group>"; };
 		C97FFB2E2E483EA5007EA53B /* OnBoardingScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnBoardingScreen.swift; sourceTree = "<group>"; };
 		C97FFB312E483F15007EA53B /* LoginScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginScreen.swift; sourceTree = "<group>"; };
 		C97FFB332E483F69007EA53B /* HomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreen.swift; sourceTree = "<group>"; };
@@ -86,8 +86,8 @@
 		C9D810722E326BCD00599272 /* gymadministratorUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = gymadministratorUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		C9D810762E326BCD00599272 /* gymadministratorUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = gymadministratorUITests.swift; sourceTree = "<group>"; };
 		C9D810782E326BCD00599272 /* gymadministratorUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = gymadministratorUITestsLaunchTests.swift; sourceTree = "<group>"; };
-		C9E4EF182E32D2DB00CCE3D8 /* FirebaseModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseModels.swift; sourceTree = "<group>"; };
-		C9E4EF1A2E32D2F300CCE3D8 /* MiembrosViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiembrosViews.swift; sourceTree = "<group>"; };
+		C9E4EF182E32D2DB00CCE3D8 /* FirebaseModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseModel.swift; sourceTree = "<group>"; };
+		C9E4EF1A2E32D2F300CCE3D8 /* MiembroScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiembroScreen.swift; sourceTree = "<group>"; };
 		C9E4EF1C2E331E1000CCE3D8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -142,6 +142,8 @@
 		C97FFB262E4819CA007EA53B /* models */ = {
 			isa = PBXGroup;
 			children = (
+				C97FFB232E480EE3007EA53B /* NotificationModel.swift */,
+				C9E4EF182E32D2DB00CCE3D8 /* FirebaseModel.swift */,
 			);
 			path = models;
 			sourceTree = "<group>";
@@ -152,6 +154,7 @@
 				C97FFB302E483F06007EA53B /* loginScreens */,
 				C97FFB2E2E483EA5007EA53B /* OnBoardingScreen.swift */,
 				C97FFB332E483F69007EA53B /* HomeScreen.swift */,
+				C9E4EF1A2E32D2F300CCE3D8 /* MiembroScreen.swift */,
 			);
 			path = screens;
 			sourceTree = "<group>";
@@ -173,7 +176,8 @@
 		C97FFB2B2E4834EE007EA53B /* settings */ = {
 			isa = PBXGroup;
 			children = (
-				C97FFB2C2E483940007EA53B /* Settings.swift */,
+				C97FFB2C2E483940007EA53B /* ThemeGeneralSettings.swift */,
+				C97FFB212E47EE5C007EA53B /* AppDelegate.swift */,
 			);
 			path = settings;
 			sourceTree = "<group>";
@@ -227,14 +231,10 @@
 				C97FFB202E47CE58007EA53B /* gymadministrator.entitlements */,
 				A06435BB2E340A0F00A343B2 /* GoogleService-Info.plist */,
 				C9E4EF1C2E331E1000CCE3D8 /* Info.plist */,
-				C9E4EF1A2E32D2F300CCE3D8 /* MiembrosViews.swift */,
-				C9E4EF182E32D2DB00CCE3D8 /* FirebaseModels.swift */,
 				C9D8105B2E326BCB00599272 /* gymadministratorApp.swift */,
 				C9D8105D2E326BCB00599272 /* ContentView.swift */,
 				C9D8105F2E326BCD00599272 /* Assets.xcassets */,
 				C9D810612E326BCD00599272 /* Preview Content */,
-				C97FFB212E47EE5C007EA53B /* AppDelegate.swift */,
-				C97FFB232E480EE3007EA53B /* NotificationModel.swift */,
 			);
 			path = gymadministrator;
 			sourceTree = "<group>";
@@ -431,16 +431,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				C97FFB242E480EE3007EA53B /* NotificationModel.swift in Sources */,
-				C9E4EF192E32D2DB00CCE3D8 /* FirebaseModels.swift in Sources */,
+				C9E4EF192E32D2DB00CCE3D8 /* FirebaseModel.swift in Sources */,
 				C97FFB372E483FA9007EA53B /* Components.swift in Sources */,
 				C97FFB322E483F15007EA53B /* LoginScreen.swift in Sources */,
 				C9D8105E2E326BCB00599272 /* ContentView.swift in Sources */,
-				C9E4EF1B2E32D2F300CCE3D8 /* MiembrosViews.swift in Sources */,
+				C9E4EF1B2E32D2F300CCE3D8 /* MiembroScreen.swift in Sources */,
 				C97FFB2F2E483EA5007EA53B /* OnBoardingScreen.swift in Sources */,
 				C97FFB342E483F69007EA53B /* HomeScreen.swift in Sources */,
 				C97FFB222E47EE5C007EA53B /* AppDelegate.swift in Sources */,
 				C9D8105C2E326BCB00599272 /* gymadministratorApp.swift in Sources */,
-				C97FFB2D2E483940007EA53B /* Settings.swift in Sources */,
+				C97FFB2D2E483940007EA53B /* ThemeGeneralSettings.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
