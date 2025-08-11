@@ -804,20 +804,83 @@ struct FeatureRow: View {
     let icon: String
     let text: String
     
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon)
-                .foregroundColor(.brandGold)
-                .font(.system(size: 16))
-                .frame(width: 20)
+        HStack(spacing: 0) {
+            // Spacer izquierdo para centrar en iPad grande
+            if shouldCenter {
+                Spacer()
+            }
             
-            Text(text)
-                .font(.system(size: 14, weight: .medium))
-                .foregroundColor(.brandLight.opacity(0.9))
+            // Contenido principal
+            HStack(spacing: iconSpacing) {
+                Image(systemName: icon)
+                    .foregroundColor(.brandGold)
+                    .font(.system(size: iconSize))
+                    .frame(width: iconFrameWidth)
+                
+                Text(text)
+                    .font(.system(size: fontSize, weight: .medium))
+                    .foregroundColor(.brandLight.opacity(0.9))
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(2)
+                
+                Spacer()
+            }
+            .frame(maxWidth: maxContentWidth)
             
-            Spacer()
+            // Spacer derecho para centrar en iPad grande
+            if shouldCenter {
+                Spacer()
+            }
         }
-        .padding(.horizontal, 40)
+        .padding(.horizontal, horizontalPadding)
+        .frame(minHeight: rowHeight)
+    }
+    
+    // MARK: - Propiedades adaptativas
+    private var shouldCenter: Bool {
+        // Centrar solo en iPad grande (12.9")
+        horizontalSizeClass == .regular && UIScreen.main.bounds.width > 1000
+    }
+    
+    private var maxContentWidth: CGFloat {
+        if horizontalSizeClass == .regular {
+            // En iPad, limitar el ancho del contenido
+            return UIScreen.main.bounds.width > 1000 ? 600 : .infinity
+        } else {
+            // En iPhone, usar todo el ancho disponible
+            return .infinity
+        }
+    }
+    
+    private var horizontalPadding: CGFloat {
+        if horizontalSizeClass == .regular {
+            return UIScreen.main.bounds.width > 1000 ? 40 : 60
+        } else {
+            return 20
+        }
+    }
+    
+    private var iconSpacing: CGFloat {
+        horizontalSizeClass == .regular ? 16 : 12
+    }
+    
+    private var iconSize: CGFloat {
+        horizontalSizeClass == .regular ? 18 : 16
+    }
+    
+    private var iconFrameWidth: CGFloat {
+        horizontalSizeClass == .regular ? 24 : 20
+    }
+    
+    private var fontSize: CGFloat {
+        horizontalSizeClass == .regular ? 16 : 14
+    }
+    
+    private var rowHeight: CGFloat {
+        horizontalSizeClass == .regular ? 28 : 24
     }
 }
 
