@@ -8,6 +8,55 @@
 import Foundation
 import SwiftUI
 
+struct FeatureRowOptimized: View {
+    let icon: String
+    let text: String
+    
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    
+    var body: some View {
+        HStack(spacing: iconSpacing) {
+            Image(systemName: icon)
+                .foregroundColor(.brandGold)
+                .font(.system(size: iconSize))
+                .frame(width: iconFrameWidth)
+            
+            Text(text)
+                .font(.system(size: fontSize, weight: .medium))
+                .foregroundColor(.brandLight.opacity(0.9))
+                .multilineTextAlignment(.leading)
+                .lineLimit(2)
+            
+            Spacer()
+        }
+        .frame(minHeight: rowHeight)
+    }
+    
+    private var isIPad: Bool {
+        horizontalSizeClass == .regular
+    }
+    
+    private var iconSpacing: CGFloat {
+        isIPad ? 16 : 12
+    }
+    
+    private var iconSize: CGFloat {
+        isIPad ? 20 : 16
+    }
+    
+    private var iconFrameWidth: CGFloat {
+        isIPad ? 26 : 20
+    }
+    
+    private var fontSize: CGFloat {
+        isIPad ? 18 : 14
+    }
+    
+    private var rowHeight: CGFloat {
+        isIPad ? 32 : 24
+    }
+}
+
 // MARK: - OnboardingManager
 // MARK: - OnboardingManager
 @MainActor
@@ -115,6 +164,55 @@ struct OnboardingPage {
     var isAI: Bool = false
 }
 
+struct FeatureRowUniform: View {
+    let icon: String
+    let text: String
+    
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    
+    var body: some View {
+        HStack(spacing: iconSpacing) {
+            Image(systemName: icon)
+                .foregroundColor(.brandGold)
+                .font(.system(size: iconSize))
+                .frame(width: iconFrameWidth)
+            
+            Text(text)
+                .font(.system(size: fontSize, weight: .medium))
+                .foregroundColor(.brandLight.opacity(0.9))
+                .multilineTextAlignment(.leading)
+                .lineLimit(1) // Una sola línea para uniformidad
+            
+            Spacer()
+        }
+        .frame(height: rowHeight) // ALTURA FIJA
+    }
+    
+    private var isIPad: Bool {
+        horizontalSizeClass == .regular
+    }
+    
+    private var iconSpacing: CGFloat {
+        isIPad ? 14 : 12
+    }
+    
+    private var iconSize: CGFloat {
+        isIPad ? 18 : 16
+    }
+    
+    private var iconFrameWidth: CGFloat {
+        isIPad ? 22 : 20
+    }
+    
+    private var fontSize: CGFloat {
+        isIPad ? 16 : 14
+    }
+    
+    private var rowHeight: CGFloat {
+        28 // MISMO PARA TODOS
+    }
+}
+
 // MARK: - OnboardingPageView Mejorado con Diseños Especiales
 struct OnboardingPageView: View {
     let page: OnboardingPage
@@ -123,50 +221,50 @@ struct OnboardingPageView: View {
     @State private var particleAnimation = false
     @State private var ringRotation: Double = 0
     
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
+    
     var body: some View {
-        VStack(spacing: 40) {
+        VStack(spacing: spacing) {
             Spacer()
             
-            // Icon con efectos especiales para diferentes tipos
+            // Icon con efectos especiales - MISMO TAMAÑO PARA TODOS
             ZStack {
                 if page.isAI {
-                    // Efectos especiales para la IA Gymius
                     AIGymiusIcon()
+                        .scaleEffect(uniformIconScale)
                 } else if page.icon == "bodyGoldLogo" {
-                    // Logo principal con efectos de bienvenida
                     WelcomeLogoDesign(isAnimating: $isAnimating)
+                        .scaleEffect(uniformIconScale)
                 } else if page.icon == "person.3.fill" {
-                    // Diseño para clases grupales
                     GroupClassesDesign(isAnimating: $isAnimating, particleAnimation: $particleAnimation)
+                        .scaleEffect(uniformIconScale)
                 } else if page.icon == "creditcard.fill" {
-                    // Diseño para planes
                     PlansDesign(isAnimating: $isAnimating, ringRotation: $ringRotation)
+                        .scaleEffect(uniformIconScale)
                 } else if page.icon == "figure.walk.circle.fill" {
-                    // Diseño para entrenamiento personalizado
                     PersonalTrainingDesign(isAnimating: $isAnimating, particleAnimation: $particleAnimation)
+                        .scaleEffect(uniformIconScale)
                 } else {
-                    // Iconos normales con glow (fallback)
                     Image(systemName: page.icon)
-                        .font(.system(size: 100))
+                        .font(.system(size: fallbackIconSize))
                         .foregroundColor(page.color)
                         .brandGlow()
                         .scaleEffect(isAnimating ? 1.05 : 1.0)
                         .animation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true), value: isAnimating)
                 }
             }
+            .frame(height: iconContainerHeight) // ALTURA FIJA PARA TODOS
             
-            // Content con características especiales
-            VStack(spacing: 20) {
+            // Content - MISMO LAYOUT PARA TODOS
+            VStack(spacing: textSpacing) {
                 Text(page.title)
-                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .font(.system(size: titleFontSize, weight: .bold, design: .rounded))
                     .foregroundColor(.brandWhite)
                     .multilineTextAlignment(.center)
                 
                 if page.isAI {
-                    // Subtitle especial para IA con gradiente
                     Text(page.subtitle)
-                        .font(.title2)
-                        .fontWeight(.semibold)
+                        .font(.system(size: subtitleFontSize, weight: .semibold))
                         .foregroundStyle(
                             LinearGradient(
                                 colors: [.brandAccent, .brandGold, .brandAccent],
@@ -177,62 +275,43 @@ struct OnboardingPageView: View {
                         .multilineTextAlignment(.center)
                 } else {
                     Text(page.subtitle)
-                        .font(.title2)
-                        .fontWeight(.semibold)
+                        .font(.system(size: subtitleFontSize, weight: .semibold))
                         .foregroundColor(page.color)
                         .multilineTextAlignment(.center)
                 }
                 
-                if page.isAI {
-                    // Características especiales para IA
-                    VStack(spacing: 15) {
-                        if !page.description.isEmpty {
-                            Text(page.description)
-                                .font(.body)
-                                .foregroundColor(.brandLight.opacity(0.9))
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 30)
-                        }
-                        
-                        VStack(spacing: 10) {
-                            FeatureRow(icon: "brain.head.profile", text: "Rutinas inteligentes")
-                                .opacity(showCTA ? 1.0 : 0.0)
-                                .offset(x: showCTA ? 0 : -50)
-                                .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.3), value: showCTA)
-                            
-                            FeatureRow(icon: "headphones", text: "Soporte 24/7 para tus dudas")
-                                .opacity(showCTA ? 1.0 : 0.0)
-                                .offset(x: showCTA ? 0 : -50)
-                                .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.5), value: showCTA)
-                            
-                            FeatureRow(icon: "heart.text.square", text: "Motivación personalizada")
-                                .opacity(showCTA ? 1.0 : 0.0)
-                                .offset(x: showCTA ? 0 : -50)
-                                .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.7), value: showCTA)
-                        }
-                        .padding(.top, 10)
-                    }
-                } else {
-                    // Descripción normal con efectos mejorados
-                    VStack(spacing: 15) {
+                // Descripción - SIEMPRE LA MISMA ESTRUCTURA
+                VStack(spacing: featureSpacing) {
+                    if !page.description.isEmpty {
                         Text(page.description)
-                            .font(.body)
+                            .font(.system(size: descriptionFontSize))
                             .foregroundColor(.brandLight.opacity(0.9))
                             .multilineTextAlignment(.center)
-                            .padding(.horizontal, 30)
-                            .lineLimit(nil)
+                            .padding(.horizontal, descriptionPadding)
+                            .lineLimit(3) // Límite uniforme
+                    }
+                    
+                    // Features - CENTRADAS Y UNIFORMES
+                    HStack {
+                        if isIPad {
+                            Spacer()
+                        }
                         
-                        // Features específicas por página
-                        if let features = getFeaturesForPage(page) {
-                            VStack(spacing: 8) {
+                        VStack(spacing: featureRowSpacing) {
+                            if let features = getFeaturesForPage(page) {
                                 ForEach(Array(features.enumerated()), id: \.offset) { index, feature in
-                                    FeatureRow(icon: feature.icon, text: feature.text)
+                                    FeatureRowUniform(icon: feature.icon, text: feature.text)
                                         .opacity(showCTA ? 1.0 : 0.0)
                                         .offset(x: showCTA ? 0 : -30)
-                                        .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.3 + Double(index) * 0.2), value: showCTA)
+                                        .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.3 + Double(index) * 0.15), value: showCTA)
                                 }
                             }
-                            .padding(.top, 10)
+                        }
+                        .frame(maxWidth: featuresMaxWidth)
+                        .frame(minHeight: featuresContainerHeight) // ALTURA MÍNIMA UNIFORME
+                        
+                        if isIPad {
+                            Spacer()
                         }
                     }
                 }
@@ -240,26 +319,100 @@ struct OnboardingPageView: View {
             
             Spacer()
         }
-        .padding()
+        .padding(.horizontal, horizontalPadding)
         .onAppear {
             isAnimating = true
             particleAnimation = true
             
-            // Activar características con delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 showCTA = true
             }
             
-            // Animaciones específicas
             withAnimation(.linear(duration: 15.0).repeatForever(autoreverses: false)) {
                 ringRotation = 360
             }
         }
     }
     
-    // Función para obtener características específicas de cada página
+    // MARK: - Propiedades UNIFORMES
+    private var isIPad: Bool {
+        horizontalSizeClass == .regular
+    }
+    
+    // MISMO SCALE PARA TODOS LOS ICONOS
+    private var uniformIconScale: CGFloat {
+        isIPad ? 1.0 : 1.0 // Sin escala diferente
+    }
+    
+    // ALTURA FIJA PARA CONTENEDOR DE ICONOS
+    private var iconContainerHeight: CGFloat {
+        isIPad ? 180 : 160
+    }
+    
+    // ALTURA MÍNIMA PARA CONTENEDOR DE FEATURES
+    private var featuresContainerHeight: CGFloat {
+        isIPad ? 120 : 100
+    }
+    
+    private var titleFontSize: CGFloat {
+        isIPad ? 32 : 28
+    }
+    
+    private var subtitleFontSize: CGFloat {
+        isIPad ? 20 : 18
+    }
+    
+    private var descriptionFontSize: CGFloat {
+        isIPad ? 17 : 16
+    }
+    
+    private var spacing: CGFloat {
+        isIPad ? 30 : 40
+    }
+    
+    private var textSpacing: CGFloat {
+        isIPad ? 20 : 20
+    }
+    
+    private var featureSpacing: CGFloat {
+        isIPad ? 15 : 15
+    }
+    
+    private var featureRowSpacing: CGFloat {
+        isIPad ? 10 : 10
+    }
+    
+    private var horizontalPadding: CGFloat {
+        isIPad ? 60 : 20
+    }
+    
+    private var descriptionPadding: CGFloat {
+        isIPad ? 80 : 30
+    }
+    
+    private var featuresMaxWidth: CGFloat {
+        isIPad ? 500 : .infinity
+    }
+    
+    private var fallbackIconSize: CGFloat {
+        isIPad ? 100 : 100
+    }
+    
+    // Función para obtener características - INCLUYE GYMIUS
     private func getFeaturesForPage(_ page: OnboardingPage) -> [(icon: String, text: String)]? {
         switch page.title {
+        case "Bienvenido a Gym Body Gold":
+            return [
+                (icon: "star.fill", text: "Equipos de última generación"),
+                (icon: "heart.fill", text: "Ambiente motivador"),
+                (icon: "trophy.fill", text: "Alcanza tus metas")
+            ]
+        case "Conoce a Gymius":
+            return [
+                (icon: "brain.head.profile", text: "Rutinas inteligentes"),
+                (icon: "headphones", text: "Soporte 24/7 para tus dudas"),
+                (icon: "heart.text.square", text: "Motivación personalizada")
+            ]
         case "Clases Grupales y Más":
             return [
                 (icon: "music.note", text: "Zumba y bailes"),
@@ -283,6 +436,8 @@ struct OnboardingPageView: View {
         }
     }
 }
+
+
 
 // MARK: - Diseño Especial para Logo de Bienvenida
 struct WelcomeLogoDesign: View {
@@ -1087,10 +1242,78 @@ struct AIGymiusIcon: View {
     }
 }
 
+struct GymiusFeatureCardCompact: View {
+    let feature: GymiusFeature
+    let isVisible: Bool
+    let delay: Double
+    
+    @State private var cardOffset: CGFloat = 50
+    @State private var cardOpacity: Double = 0
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Icon más pequeño
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [feature.color.opacity(0.3), feature.color.opacity(0.1)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 50, height: 50)
+                
+                Image(systemName: feature.icon)
+                    .font(.system(size: 20))
+                    .foregroundColor(feature.color)
+            }
+            
+            // Content más compacto
+            VStack(alignment: .leading, spacing: 6) {
+                Text(feature.title)
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.brandWhite)
+                
+                Text(feature.description)
+                    .font(.system(size: 15))
+                    .foregroundColor(.brandLight.opacity(0.8))
+                    .multilineTextAlignment(.leading)
+                    .lineLimit(3)
+            }
+            
+            Spacer()
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 16)
+                .fill(Color.brandWhite.opacity(0.05))
+                .backdrop(blur: 10)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(feature.color.opacity(0.3), lineWidth: 1)
+        )
+        .offset(x: cardOffset)
+        .opacity(cardOpacity)
+        .onChange(of: isVisible) { newValue in
+            if newValue {
+                withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(delay)) {
+                    cardOffset = 0
+                    cardOpacity = 1
+                }
+            }
+        }
+    }
+}
+
 struct GymiusIntroView: View {
     @State private var showFeatures = false
     @State private var currentFeature = 0
     @Binding var isPresented: Bool
+    
+    @Environment(\.horizontalSizeClass) var horizontalSizeClass
     
     let features = [
         GymiusFeature(
@@ -1133,102 +1356,10 @@ struct GymiusIntroView: View {
             )
             .ignoresSafeArea()
             
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 40) {
-                    // Header con cierre
-                    HStack {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text("Conoce a")
-                                .font(.title2)
-                                .foregroundColor(.brandLight)
-                            
-                            Text("Gymius")
-                                .font(.system(size: 36, weight: .bold, design: .rounded))
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [.brandAccent, .brandGold],
-                                        startPoint: .leading,
-                                        endPoint: .trailing
-                                    )
-                                )
-                        }
-                        
-                        Spacer()
-                        
-                        Button(action: {
-                            isPresented = false
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.brandLight.opacity(0.7))
-                        }
-                    }
-                    .padding(.horizontal, 30)
-                    .padding(.top, 20)
-                    
-                    // Gymius Avatar
-                    AIGymiusIcon()
-                        .scaleEffect(0.8)
-                    
-                    // Descripción principal
-                    VStack(spacing: 20) {
-                        Text("Tu Asistente Personal con IA")
-                            .font(.title2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.brandGold)
-                            .multilineTextAlignment(.center)
-                        
-                        Text("Gymius es la primera IA especializada en fitness que te acompañará en cada paso de tu transformación. Diseñada específicamente para Gym Body Gold.")
-                            .font(.body)
-                            .foregroundColor(.brandLight.opacity(0.9))
-                            .multilineTextAlignment(.center)
-                            .padding(.horizontal, 30)
-                    }
-                    
-                    // Features Cards
-                    LazyVStack(spacing: 20) {
-                        ForEach(Array(features.enumerated()), id: \.offset) { index, feature in
-                            GymiusFeatureCard(
-                                feature: feature,
-                                isVisible: showFeatures,
-                                delay: Double(index) * 0.2
-                            )
-                        }
-                    }
-                    .padding(.horizontal, 30)
-                    
-                    // Call to Action
-                    VStack(spacing: 20) {
-                        Text("¿Listo para entrenar con Gymius?")
-                            .font(.headline)
-                            .foregroundColor(.brandWhite)
-                            .multilineTextAlignment(.center)
-                        
-                        Button(action: {
-                            isPresented = false
-                        }) {
-                            HStack(spacing: 12) {
-                                Image(systemName: "brain.head.profile")
-                                Text("¡Comenzar con Gymius!")
-                                    .fontWeight(.semibold)
-                                Image(systemName: "arrow.right.circle.fill")
-                            }
-                            .foregroundColor(.brandBlack)
-                            .padding(.horizontal, 30)
-                            .padding(.vertical, 16)
-                            .background(
-                                LinearGradient.brandPrimary
-                                    .clipShape(RoundedRectangle(cornerRadius: 25))
-                            )
-                            .shadow(color: .brandGold.opacity(0.3), radius: 10, x: 0, y: 5)
-                        }
-                        .scaleEffect(showFeatures ? 1.0 : 0.8)
-                        .opacity(showFeatures ? 1.0 : 0.0)
-                        .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(1.0), value: showFeatures)
-                    }
-                    .padding(.top, 20)
-                    .padding(.bottom, 40)
-                }
+            if isIPad {
+                iPadLayout
+            } else {
+                iPhoneLayout
             }
         }
         .onAppear {
@@ -1237,7 +1368,175 @@ struct GymiusIntroView: View {
             }
         }
     }
+    
+    // MARK: - Layout para iPad
+    private var iPadLayout: some View {
+        VStack(spacing: 0) {
+            // Header compacto
+            headerSection
+                .padding(.top, 30)
+                .padding(.horizontal, 60)
+            
+            // Contenido principal en dos columnas
+            HStack(spacing: 60) {
+                // Columna izquierda - Avatar y descripción
+                VStack(spacing: 25) {
+                    AIGymiusIcon()
+                        .scaleEffect(1.1)
+                    
+                    VStack(spacing: 15) {
+                        Text("Tu Asistente Personal con IA")
+                            .font(.system(size: 26, weight: .semibold))
+                            .foregroundColor(.brandGold)
+                            .multilineTextAlignment(.center)
+                        
+                        Text("Gymius es la primera IA especializada en fitness que te acompañará en cada paso de tu transformación.")
+                            .font(.system(size: 18))
+                            .foregroundColor(.brandLight.opacity(0.9))
+                            .multilineTextAlignment(.center)
+                            .lineLimit(4)
+                    }
+                }
+                .frame(maxWidth: 400)
+                
+                // Columna derecha - Features
+                VStack(spacing: 15) {
+                    ForEach(Array(features.enumerated()), id: \.offset) { index, feature in
+                        GymiusFeatureCardCompact(
+                            feature: feature,
+                            isVisible: showFeatures,
+                            delay: Double(index) * 0.15
+                        )
+                    }
+                }
+                .frame(maxWidth: 400)
+            }
+            .padding(.horizontal, 60)
+            .padding(.vertical, 40)
+            
+            // CTA Button
+            ctaSection
+                .padding(.horizontal, 60)
+                .padding(.bottom, 50)
+        }
+    }
+    
+    // MARK: - Layout para iPhone
+    private var iPhoneLayout: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(spacing: 40) {
+                // Header
+                headerSection
+                    .padding(.horizontal, 30)
+                    .padding(.top, 20)
+                
+                // Gymius Avatar
+                AIGymiusIcon()
+                    .scaleEffect(0.8)
+                
+                // Descripción principal
+                VStack(spacing: 20) {
+                    Text("Tu Asistente Personal con IA")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.brandGold)
+                        .multilineTextAlignment(.center)
+                    
+                    Text("Gymius es la primera IA especializada en fitness que te acompañará en cada paso de tu transformación. Diseñada específicamente para Gym Body Gold.")
+                        .font(.body)
+                        .foregroundColor(.brandLight.opacity(0.9))
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 30)
+                }
+                
+                // Features Cards
+                LazyVStack(spacing: 20) {
+                    ForEach(Array(features.enumerated()), id: \.offset) { index, feature in
+                        GymiusFeatureCard(
+                            feature: feature,
+                            isVisible: showFeatures,
+                            delay: Double(index) * 0.2
+                        )
+                    }
+                }
+                .padding(.horizontal, 30)
+                
+                // CTA
+                ctaSection
+                    .padding(.bottom, 40)
+            }
+        }
+    }
+    
+    // MARK: - Componentes reutilizables
+    private var headerSection: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Conoce a")
+                    .font(.system(size: isIPad ? 22 : 18))
+                    .foregroundColor(.brandLight)
+                
+                Text("Gymius")
+                    .font(.system(size: isIPad ? 42 : 36, weight: .bold, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.brandAccent, .brandGold],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+            }
+            
+            Spacer()
+            
+            Button(action: {
+                isPresented = false
+            }) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: isIPad ? 26 : 22))
+                    .foregroundColor(.brandLight.opacity(0.7))
+            }
+        }
+    }
+    
+    private var ctaSection: some View {
+        VStack(spacing: 20) {
+            Text("¿Listo para entrenar con Gymius?")
+                .font(.system(size: isIPad ? 20 : 17, weight: .semibold))
+                .foregroundColor(.brandWhite)
+                .multilineTextAlignment(.center)
+            
+            Button(action: {
+                isPresented = false
+            }) {
+                HStack(spacing: 12) {
+                    Image(systemName: "brain.head.profile")
+                    Text("¡Comenzar con Gymius!")
+                        .fontWeight(.semibold)
+                    Image(systemName: "arrow.right.circle.fill")
+                }
+                .font(.system(size: isIPad ? 18 : 16))
+                .foregroundColor(.brandBlack)
+                .padding(.horizontal, isIPad ? 40 : 30)
+                .padding(.vertical, isIPad ? 18 : 16)
+                .background(
+                    LinearGradient.brandPrimary
+                        .clipShape(RoundedRectangle(cornerRadius: 25))
+                )
+                .shadow(color: .brandGold.opacity(0.3), radius: 10, x: 0, y: 5)
+            }
+            .scaleEffect(showFeatures ? 1.0 : 0.8)
+            .opacity(showFeatures ? 1.0 : 0.0)
+            .animation(.spring(response: 0.6, dampingFraction: 0.8).delay(1.0), value: showFeatures)
+        }
+    }
+    
+    // MARK: - Computed Properties
+    private var isIPad: Bool {
+        horizontalSizeClass == .regular
+    }
 }
+
 
 struct GymiusFeature {
     let icon: String
@@ -1313,6 +1612,14 @@ struct GymiusFeatureCard: View {
 // MARK: - Preview
 struct GymiusIntroView_Previews: PreviewProvider {
     static var previews: some View {
-        GymiusIntroView(isPresented: .constant(true))
+        Group {
+            GymiusIntroView(isPresented: .constant(true))
+                .previewDevice("iPad Pro (12.9-inch) (6th generation)")
+                .previewDisplayName("iPad")
+            
+            GymiusIntroView(isPresented: .constant(true))
+                .previewDevice("iPhone 14")
+                .previewDisplayName("iPhone")
+        }
     }
 }
