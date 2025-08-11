@@ -47,6 +47,8 @@
 		C9D810B62E326C6400599272 /* FirebaseVertexAI-Preview in Frameworks */ = {isa = PBXBuildFile; productRef = C9D810B52E326C6400599272 /* FirebaseVertexAI-Preview */; };
 		C9E4EF192E32D2DB00CCE3D8 /* FirebaseModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E4EF182E32D2DB00CCE3D8 /* FirebaseModel.swift */; };
 		C9E4EF1B2E32D2F300CCE3D8 /* MiembroScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9E4EF1A2E32D2F300CCE3D8 /* MiembroScreen.swift */; };
+		C9EE19F32E49326400F54F5E /* ProductionPasswordResetManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9EE19F22E49326400F54F5E /* ProductionPasswordResetManager.swift */; };
+		C9EE19F52E495CFE00F54F5E /* FcmManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9EE19F42E495CFE00F54F5E /* FcmManager.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -89,6 +91,8 @@
 		C9E4EF182E32D2DB00CCE3D8 /* FirebaseModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FirebaseModel.swift; sourceTree = "<group>"; };
 		C9E4EF1A2E32D2F300CCE3D8 /* MiembroScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MiembroScreen.swift; sourceTree = "<group>"; };
 		C9E4EF1C2E331E1000CCE3D8 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		C9EE19F22E49326400F54F5E /* ProductionPasswordResetManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProductionPasswordResetManager.swift; sourceTree = "<group>"; };
+		C9EE19F42E495CFE00F54F5E /* FcmManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FcmManager.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -162,6 +166,7 @@
 		C97FFB282E4834D1007EA53B /* services */ = {
 			isa = PBXGroup;
 			children = (
+				C9EE19F42E495CFE00F54F5E /* FcmManager.swift */,
 			);
 			path = services;
 			sourceTree = "<group>";
@@ -186,6 +191,7 @@
 			isa = PBXGroup;
 			children = (
 				C97FFB312E483F15007EA53B /* LoginScreen.swift */,
+				C9EE19F22E49326400F54F5E /* ProductionPasswordResetManager.swift */,
 			);
 			path = loginScreens;
 			sourceTree = "<group>";
@@ -432,7 +438,9 @@
 			files = (
 				C97FFB242E480EE3007EA53B /* NotificationModel.swift in Sources */,
 				C9E4EF192E32D2DB00CCE3D8 /* FirebaseModel.swift in Sources */,
+				C9EE19F52E495CFE00F54F5E /* FcmManager.swift in Sources */,
 				C97FFB372E483FA9007EA53B /* Components.swift in Sources */,
+				C9EE19F32E49326400F54F5E /* ProductionPasswordResetManager.swift in Sources */,
 				C97FFB322E483F15007EA53B /* LoginScreen.swift in Sources */,
 				C9D8105E2E326BCB00599272 /* ContentView.swift in Sources */,
 				C9E4EF1B2E32D2F300CCE3D8 /* MiembroScreen.swift in Sources */,

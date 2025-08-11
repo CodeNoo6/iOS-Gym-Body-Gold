@@ -10,22 +10,314 @@ import SwiftUI
 import FirebaseCore
 import FirebaseAuth
 import Firebase
+import FirebaseFirestore
+import FirebaseMessaging
+import UserNotifications
 
-// MARK: - AuthManager
+// MARK: - User Data Model
+// MARK: - User Data Model con FCM Token
+struct UserData {
+    var uid: String
+    var email: String
+    var displayName: String
+    var idTipoDocumento: Int
+    var numeroDocumento: String
+    var nombre: String
+    var apellido: String
+    var telefono: String
+    var fechaNacimiento: Date
+    var direccion: String
+    var activo: Bool
+    var idGenero: Int
+    var edad: String?
+    var peso: String?
+    var estatura: String?
+    var fechaCreacion: Date
+    var rol: String
+    var fcmToken: String? // Nuevo campo para FCM token
+    var lastTokenUpdate: Date? // Última actualización del token
+
+    var dictionary: [String: Any] {
+        var dict: [String: Any] = [
+            "uid": uid,
+            "email": email,
+            "displayName": displayName,
+            "idTipoDocumento": idTipoDocumento,
+            "numeroDocumento": numeroDocumento,
+            "nombre": nombre,
+            "apellido": apellido,
+            "telefono": telefono,
+            "fechaNacimiento": Timestamp(date: fechaNacimiento),
+            "direccion": direccion,
+            "activo": activo,
+            "idGenero": idGenero,
+            "fechaCreacion": Timestamp(date: fechaCreacion),
+            "rol": rol
+        ]
+
+        if let edad = edad, !edad.isEmpty { dict["edad"] = edad }
+        if let peso = peso, !peso.isEmpty { dict["peso"] = peso }
+        if let estatura = estatura, !estatura.isEmpty { dict["estatura"] = estatura }
+        if let fcmToken = fcmToken, !fcmToken.isEmpty { dict["fcmToken"] = fcmToken }
+        if let lastTokenUpdate = lastTokenUpdate { dict["lastTokenUpdate"] = Timestamp(date: lastTokenUpdate) }
+
+        return dict
+    }
+    
+    // Inicializador desde Firestore data
+    init(from firestoreData: [String: Any], uid: String) {
+        self.uid = uid
+        self.email = firestoreData["email"] as? String ?? ""
+        self.displayName = firestoreData["displayName"] as? String ?? ""
+        self.idTipoDocumento = firestoreData["idTipoDocumento"] as? Int ?? 1
+        self.numeroDocumento = firestoreData["numeroDocumento"] as? String ?? ""
+        self.nombre = firestoreData["nombre"] as? String ?? ""
+        self.apellido = firestoreData["apellido"] as? String ?? ""
+        self.telefono = firestoreData["telefono"] as? String ?? ""
+        self.fechaNacimiento = (firestoreData["fechaNacimiento"] as? Timestamp)?.dateValue() ?? Date()
+        self.direccion = firestoreData["direccion"] as? String ?? ""
+        self.activo = firestoreData["activo"] as? Bool ?? true
+        self.idGenero = firestoreData["idGenero"] as? Int ?? 1
+        self.edad = firestoreData["edad"] as? String
+        self.peso = firestoreData["peso"] as? String
+        self.estatura = firestoreData["estatura"] as? String
+        self.fechaCreacion = (firestoreData["fechaCreacion"] as? Timestamp)?.dateValue() ?? Date()
+        self.rol = firestoreData["rol"] as? String ?? "usuario"
+        self.fcmToken = firestoreData["fcmToken"] as? String
+        self.lastTokenUpdate = (firestoreData["lastTokenUpdate"] as? Timestamp)?.dateValue()
+    }
+    
+    // Inicializador manual (para registro)
+    init(
+        uid: String,
+        email: String,
+        displayName: String,
+        idTipoDocumento: Int,
+        numeroDocumento: String,
+        nombre: String,
+        apellido: String,
+        telefono: String,
+        fechaNacimiento: Date,
+        direccion: String,
+        activo: Bool,
+        idGenero: Int,
+        edad: String? = nil,
+        peso: String? = nil,
+        estatura: String? = nil,
+        fechaCreacion: Date,
+        rol: String,
+        fcmToken: String? = nil
+    ) {
+        self.uid = uid
+        self.email = email
+        self.displayName = displayName
+        self.idTipoDocumento = idTipoDocumento
+        self.numeroDocumento = numeroDocumento
+        self.nombre = nombre
+        self.apellido = apellido
+        self.telefono = telefono
+        self.fechaNacimiento = fechaNacimiento
+        self.direccion = direccion
+        self.activo = activo
+        self.idGenero = idGenero
+        self.edad = edad
+        self.peso = peso
+        self.estatura = estatura
+        self.fechaCreacion = fechaCreacion
+        self.rol = rol
+        self.fcmToken = fcmToken
+        self.lastTokenUpdate = fcmToken != nil ? Date() : nil
+    }
+}
+
+struct CustomDatePicker: View {
+    let placeholder: String
+    let icon: String
+    @Binding var date: Date
+    
+    var body: some View {
+        HStack(spacing: 15) {
+            Image(systemName: icon)
+                .foregroundColor(.brandGold)
+                .frame(width: 20, height: 20)
+            
+            HStack {
+                Text(placeholder)
+                    .foregroundColor(.brandGold)
+                    .font(.system(size: 16))
+                
+                Spacer()
+                
+                DatePicker(
+                    "",
+                    selection: $date,
+                    displayedComponents: .date
+                )
+                .datePickerStyle(.compact)
+                .labelsHidden()
+                .accentColor(.brandGold)
+                .colorScheme(.dark) // Forzar esquema oscuro
+                .environment(\.colorScheme, .dark) // Asegurar tema oscuro
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 15)
+                .fill(Color.brandDark.opacity(0.3))
+                .backdrop(blur: 10)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 15)
+                .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
+
+struct CustomPicker<T: Hashable>: View {
+    let placeholder: String
+    let icon: String
+    @Binding var selection: T
+    let options: [(T, String)]
+    
+    var body: some View {
+        HStack(spacing: 15) {
+            Image(systemName: icon)
+                .foregroundColor(.brandGold)
+                .frame(width: 20, height: 20)
+            
+            Text(placeholder)
+                .foregroundColor(.brandGold)
+                .font(.system(size: 16))
+            
+            Spacer()
+            
+            Picker(placeholder, selection: $selection) {
+                ForEach(options, id: \.0) { option in
+                    Text(option.1)
+                        .foregroundColor(.brandGold)
+                        .tag(option.0)
+                }
+            }
+            .pickerStyle(MenuPickerStyle())
+            .accentColor(.brandGold)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 15)
+                .fill(Color.brandDark.opacity(0.3))
+                .backdrop(blur: 10)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 15)
+                .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
+
+struct CustomSegmentedPicker<T: Hashable>: View {
+    let placeholder: String
+    let icon: String
+    @Binding var selection: T
+    let options: [(T, String)]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 15) {
+                Image(systemName: icon)
+                    .foregroundColor(.brandGold)
+                    .frame(width: 20, height: 20)
+                
+                Text(placeholder)
+                    .foregroundColor(.brandGold)
+                    .font(.system(size: 16))
+                
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
+            
+            Picker(placeholder, selection: $selection) {
+                ForEach(options, id: \.0) { option in
+                    Text(option.1)
+                        .foregroundColor(.brandGold)
+                        .tag(option.0)
+                }
+            }
+            .pickerStyle(SegmentedPickerStyle())
+            .accentColor(.brandGold)
+            .colorScheme(.dark)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 15)
+                .fill(Color.brandDark.opacity(0.3))
+                .backdrop(blur: 10)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 15)
+                .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
+
+// MARK: - Custom Components for Consistent Design
 @MainActor
 class AuthManager: ObservableObject {
     @Published var user: User?
-    @Published var isLoading = false
+    @Published var isLoading = true
     @Published var errorMessage = ""
     @Published var isAuthenticated = false
+    @Published var currentUserData: UserData?
     
     private var authStateHandle: AuthStateDidChangeListenerHandle?
+    private let fcmManager = FCMNotificationManager.shared
     
     init() {
+        print("🔐 AuthManager: Inicializando...")
+        
+        // Inicializar FCM Manager
+        fcmManager.setupNotifications()
+        
+        // Verificar estado inicial inmediatamente
+        if let currentUser = Auth.auth().currentUser {
+            print("🔐 AuthManager: Usuario ya autenticado encontrado: \(currentUser.email ?? "sin email")")
+            self.user = currentUser
+            self.isAuthenticated = true
+            
+            // Cargar datos del usuario
+            Task {
+                await self.loadUserData(uid: currentUser.uid)
+                await MainActor.run {
+                    self.isLoading = false
+                }
+            }
+        } else {
+            print("🔐 AuthManager: No hay usuario autenticado")
+            self.isLoading = false
+        }
+        
+        // Configurar listener para cambios futuros
         authStateHandle = Auth.auth().addStateDidChangeListener { [weak self] _, user in
-            DispatchQueue.main.async {
+            Task { @MainActor in
+                print("🔐 AuthManager: Estado de auth cambió - Usuario: \(user?.email ?? "nil")")
+                
                 self?.user = user
                 self?.isAuthenticated = user != nil
+                
+                if let uid = user?.uid {
+                    await self?.loadUserData(uid: uid)
+                } else {
+                    self?.currentUserData = nil
+                    print("🔐 AuthManager: Usuario desconectado - limpiando datos")
+                }
+                
+                // Solo cambiar isLoading si estaba en true
+                if self?.isLoading == true {
+                    self?.isLoading = false
+                }
             }
         }
     }
@@ -36,61 +328,399 @@ class AuthManager: ObservableObject {
         }
     }
     
+    // ✅ FUNCIÓN PARA TRADUCIR ERRORES DE FIREBASE
+    private func translateFirebaseError(_ error: Error) -> String {
+        guard let errorCode = AuthErrorCode(rawValue: (error as NSError).code) else {
+            return "Ha ocurrido un error inesperado. Por favor, intenta de nuevo."
+        }
+        
+        switch errorCode {
+        // Errores de inicio de sesión
+        case .userNotFound:
+            return "❌ No existe una cuenta con este correo electrónico"
+        case .wrongPassword:
+            return "❌ La contraseña es incorrecta"
+        case .invalidEmail:
+            return "❌ El formato del correo electrónico no es válido"
+        case .userDisabled:
+            return "❌ Esta cuenta ha sido deshabilitada"
+        case .tooManyRequests:
+            return "❌ Demasiados intentos fallidos. Intenta más tarde"
+        case .invalidCredential:
+            return "❌ Las credenciales proporcionadas no son válidas"
+        
+        // Errores de registro
+        case .emailAlreadyInUse:
+            return "❌ Ya existe una cuenta con este correo electrónico"
+        case .weakPassword:
+            return "❌ La contraseña es muy débil. Debe tener al menos 6 caracteres"
+        case .operationNotAllowed:
+            return "❌ El registro con correo y contraseña no está habilitado"
+        
+        // Errores de red
+        case .networkError:
+            return "❌ Error de conexión. Verifica tu internet e intenta de nuevo"
+        case .internalError:
+            return "❌ Error interno del servidor. Intenta más tarde"
+        
+        case .invalidUserToken:
+            return "❌ Tu sesión ha expirado. Inicia sesión nuevamente"
+        case .userTokenExpired:
+            return "❌ Tu sesión ha expirado. Inicia sesión nuevamente"
+        
+        // Errores de recuperación de contraseña
+        case .missingEmail:
+            return "❌ Por favor, ingresa tu correo electrónico"
+        case .invalidRecipientEmail:
+            return "❌ El correo electrónico no es válido"
+        case .invalidSender:
+            return "❌ Error en el envío del correo. Intenta más tarde"
+        case .invalidMessagePayload:
+            return "❌ Error en el formato del mensaje"
+        
+        // Error genérico
+        default:
+            return "❌ Ha ocurrido un error. Por favor, intenta de nuevo"
+        }
+    }
+    
+    func loadUserData(uid: String) async {
+        print("🔐 AuthManager: Cargando datos del usuario: \(uid)")
+        
+        do {
+            let doc = try await Firestore.firestore().collection("usuarios").document(uid).getDocument()
+            if let data = doc.data() {
+                let fetched = UserData(from: data, uid: uid)
+                
+                await MainActor.run {
+                    self.currentUserData = fetched
+                    print("✅ AuthManager: Datos de usuario cargados exitosamente con rol: \(fetched.rol)")
+                }
+            } else {
+                print("⚠️ AuthManager: No se encontraron datos del usuario en Firestore")
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "❌ Error al cargar los datos del usuario"
+                print("❌ AuthManager: Error cargando datos: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    func updateUserData(_ userData: UserData) async {
+        guard let uid = user?.uid else { return }
+        
+        await MainActor.run {
+            self.isLoading = true
+            self.errorMessage = ""
+        }
+
+        do {
+            try await Firestore.firestore().collection("usuarios")
+                .document(uid)
+                .setData(userData.dictionary, merge: true)
+
+            // actualizar displayName en Firebase Auth si cambió
+            if let authUser = self.user, authUser.displayName != userData.displayName {
+                let changeRequest = authUser.createProfileChangeRequest()
+                changeRequest.displayName = userData.displayName
+                try await changeRequest.commitChanges()
+                
+                // Actualizar la propiedad para refrescar vistas
+                await MainActor.run {
+                    self.user = Auth.auth().currentUser
+                }
+            }
+
+            // actualizar copia local
+            await MainActor.run {
+                self.currentUserData = userData
+                print("✅ Datos de usuario actualizados")
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = "❌ Error al actualizar los datos del usuario"
+                print("❌ Error actualizando usuario: \(error.localizedDescription)")
+            }
+        }
+        
+        await MainActor.run {
+            self.isLoading = false
+        }
+    }
+    
     func signIn(email: String, password: String) async {
-        isLoading = true
-        errorMessage = ""
+        await MainActor.run {
+            self.isLoading = true
+            self.errorMessage = ""
+        }
+        
+        // Validaciones básicas
+        guard !email.isEmpty else {
+            await MainActor.run {
+                self.errorMessage = "❌ Por favor, ingresa tu correo electrónico"
+                self.isLoading = false
+            }
+            return
+        }
+        
+        guard !password.isEmpty else {
+            await MainActor.run {
+                self.errorMessage = "❌ Por favor, ingresa tu contraseña"
+                self.isLoading = false
+            }
+            return
+        }
         
         do {
             let result = try await Auth.auth().signIn(withEmail: email, password: password)
-            print("✅ Administrador logueado: \(result.user.email ?? "")")
+            print("✅ Usuario logueado: \(result.user.email ?? "")")
+            
+            // Actualizar FCM token después del login
+            await updateFCMTokenForCurrentUser()
+            
+            await MainActor.run {
+                self.errorMessage = ""
+            }
         } catch {
-            errorMessage = error.localizedDescription
+            await MainActor.run {
+                self.errorMessage = self.translateFirebaseError(error)
+                print("❌ Error en login: \(error.localizedDescription)")
+            }
         }
         
-        isLoading = false
+        await MainActor.run {
+            self.isLoading = false
+        }
     }
     
-    func signUp(email: String, password: String, displayName: String = "") async {
-        isLoading = true
-        errorMessage = ""
-        
-        do {
-            let result = try await Auth.auth().createUser(withEmail: email, password: password)
-            
-            if !displayName.isEmpty {
-                let changeRequest = result.user.createProfileChangeRequest()
-                changeRequest.displayName = displayName
-                try await changeRequest.commitChanges()
-            }
-            
-            print("✅ Administrador creado: \(result.user.email ?? "")")
-        } catch {
-            errorMessage = error.localizedDescription
+    func createUserWithFirestore(email: String, password: String, userData: UserData) async {
+        await MainActor.run {
+            self.isLoading = true
+            self.errorMessage = ""
         }
         
-        isLoading = false
+        // Validaciones básicas
+        guard !email.isEmpty else {
+            await MainActor.run {
+                self.errorMessage = "❌ Por favor, ingresa tu correo electrónico"
+                self.isLoading = false
+            }
+            return
+        }
+        
+        guard !password.isEmpty else {
+            await MainActor.run {
+                self.errorMessage = "❌ Por favor, ingresa tu contraseña"
+                self.isLoading = false
+            }
+            return
+        }
+        
+        guard password.count >= 6 else {
+            await MainActor.run {
+                self.errorMessage = "❌ La contraseña debe tener al menos 6 caracteres"
+                self.isLoading = false
+            }
+            return
+        }
+
+        do {
+            // 1️⃣ Crear usuario en Firebase Auth
+            let result = try await Auth.auth().createUser(withEmail: email, password: password)
+            let uid = result.user.uid
+            print("✅ Usuario creado en Firebase Auth con UID: \(uid)")
+
+            // 2️⃣ Actualizar displayName en el perfil
+            if !userData.displayName.isEmpty {
+                let changeRequest = result.user.createProfileChangeRequest()
+                changeRequest.displayName = userData.displayName
+                try await changeRequest.commitChanges()
+                print("✅ DisplayName actualizado en Firebase Auth")
+            }
+
+            // 3️⃣ Obtener FCM token antes de guardar en Firestore
+            print("📱 Obteniendo FCM token para el nuevo usuario...")
+            let fcmToken = await getFCMTokenForNewUser()
+            
+            // 4️⃣ Crear UserData actualizado con FCM token
+            var userDataWithFCM = UserData(
+                uid: uid,
+                email: userData.email,
+                displayName: userData.displayName,
+                idTipoDocumento: userData.idTipoDocumento,
+                numeroDocumento: userData.numeroDocumento,
+                nombre: userData.nombre,
+                apellido: userData.apellido,
+                telefono: userData.telefono,
+                fechaNacimiento: userData.fechaNacimiento,
+                direccion: userData.direccion,
+                activo: userData.activo,
+                idGenero: userData.idGenero,
+                edad: userData.edad,
+                peso: userData.peso,
+                estatura: userData.estatura,
+                fechaCreacion: userData.fechaCreacion,
+                rol: userData.rol,
+                fcmToken: fcmToken
+            )
+
+            // 5️⃣ Guardar en colección "usuarios" con FCM token
+            let db = Firestore.firestore()
+            try await db.collection("usuarios").document(uid).setData(userDataWithFCM.dictionary)
+
+            print("✅ Usuario guardado en Firestore con FCM token: \(fcmToken?.prefix(20) ?? "nil")...")
+            
+            // 6️⃣ Enviar notificación de bienvenida
+            if let token = fcmToken {
+                await sendWelcomeNotification(to: token, userName: userData.nombre)
+            }
+            
+            await MainActor.run {
+                self.errorMessage = ""
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = self.translateFirebaseError(error)
+                print("❌ Error creando usuario: \(error.localizedDescription)")
+            }
+        }
+
+        await MainActor.run {
+            self.isLoading = false
+        }
+    }
+    
+    // MARK: - Funciones auxiliares para FCM
+    
+    private func getFCMTokenForNewUser() async -> String? {
+        return await withCheckedContinuation { continuation in
+            Messaging.messaging().token { token, error in
+                if let error = error {
+                    print("❌ Error obteniendo FCM token para nuevo usuario: \(error.localizedDescription)")
+                    continuation.resume(returning: nil)
+                } else if let token = token {
+                    print("✅ FCM token obtenido para nuevo usuario: \(String(token.prefix(20)))...")
+                    continuation.resume(returning: token)
+                } else {
+                    print("⚠️ No se pudo obtener FCM token para nuevo usuario")
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+    
+    private func updateFCMTokenForCurrentUser() async {
+        guard let uid = user?.uid else { return }
+        
+        if let fcmToken = await getFCMTokenForNewUser() {
+            do {
+                try await Firestore.firestore().collection("usuarios").document(uid).updateData([
+                    "fcmToken": fcmToken,
+                    "lastTokenUpdate": Timestamp()
+                ])
+                print("✅ FCM token actualizado para usuario existente")
+            } catch {
+                print("❌ Error actualizando FCM token: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func sendWelcomeNotification(to token: String, userName: String) async {
+        let payload: [String: Any] = [
+            "to": token,
+            "notification": [
+                "title": "🏋️‍♂️ ¡Bienvenido a Gym Body Gold!",
+                "body": "¡Hola \(userName)! Tu cuenta ha sido creada exitosamente. ¡Estamos emocionados de tenerte en nuestra familia fitness!",
+                "sound": "default",
+                "badge": 1
+            ],
+            "data": [
+                "type": "welcome",
+                "action": "account_created",
+                "timestamp": "\(Date().timeIntervalSince1970)"
+            ],
+            "priority": "high"
+        ]
+        
+        guard let url = URL(string: "https://fcm.googleapis.com/fcm/send") else { return }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // IMPORTANTE: Reemplaza con tu Server Key real
+        let serverKey = "AAAA8gZ9pQY:APA91bHsample-server-key-here"
+        request.setValue("key=\(serverKey)", forHTTPHeaderField: "Authorization")
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+            
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            if let httpResponse = response as? HTTPURLResponse {
+                if httpResponse.statusCode == 200 {
+                    print("✅ Notificación de bienvenida enviada exitosamente")
+                } else {
+                    print("❌ Error enviando notificación de bienvenida. Status: \(httpResponse.statusCode)")
+                }
+            }
+            
+        } catch {
+            print("❌ Error en request de notificación de bienvenida: \(error.localizedDescription)")
+        }
     }
     
     func signOut() {
+        print("🔐 AuthManager: Cerrando sesión...")
+        
         do {
             try Auth.auth().signOut()
+            
+            // Limpiar datos locales inmediatamente
+            Task { @MainActor in
+                self.currentUserData = nil
+                self.user = nil
+                self.isAuthenticated = false
+                self.errorMessage = ""
+                print("✅ AuthManager: Sesión cerrada y datos limpiados")
+            }
         } catch {
-            errorMessage = error.localizedDescription
+            Task { @MainActor in
+                self.errorMessage = "❌ Error al cerrar sesión. Intenta de nuevo"
+                print("❌ AuthManager: Error cerrando sesión: \(error.localizedDescription)")
+            }
         }
     }
     
     func resetPassword(email: String) async {
-        isLoading = true
-        errorMessage = ""
+        await MainActor.run {
+            self.isLoading = true
+            self.errorMessage = ""
+        }
+        
+        guard !email.isEmpty else {
+            await MainActor.run {
+                self.errorMessage = "❌ Por favor, ingresa tu correo electrónico"
+                self.isLoading = false
+            }
+            return
+        }
         
         do {
             try await Auth.auth().sendPasswordReset(withEmail: email)
-            errorMessage = "📧 Email de recuperación enviado"
+            await MainActor.run {
+                self.errorMessage = "✅ Correo de recuperación enviado exitosamente"
+            }
         } catch {
-            errorMessage = error.localizedDescription
+            await MainActor.run {
+                self.errorMessage = self.translateFirebaseError(error)
+            }
         }
         
-        isLoading = false
+        await MainActor.run {
+            self.isLoading = false
+        }
     }
 }
 
@@ -104,12 +734,43 @@ struct LoginView: View {
     @State private var showForgotPassword = false
     @State private var showPassword = false
     
+    // Campos para registro - Información Personal
+    @State private var idTipoDocumento = 1
+    @State private var numeroDocumento = ""
+    @State private var nombre = ""
+    @State private var apellido = ""
+    @State private var telefono = ""
+    @State private var fechaNacimiento = Date()
+    @State private var direccion = ""
+    @State private var activo = true
+    @State private var idGenero = 1
+    
+    // Campos para registro - Información Física
+    @State private var edad = ""
+    @State private var peso = ""
+    @State private var estatura = ""
+    
+    // Listas para picker
+    let tiposDocumento = [
+        (1, "CC"),
+        (2, "CE"),
+        (3, "TI"),
+        (4, "PA"),
+        (5, "NIT"),
+        (6, "RC")
+    ]
+    
+    let generos = [
+        (1, "Masculino"),
+        (2, "Femenino"),
+        (3, "Otro")
+    ]
+    
     var body: some View {
         ZStack {
             // Background gradient
             LinearGradient.brandDark
                 .ignoresSafeArea()
-            
             
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
@@ -117,10 +778,7 @@ struct LoginView: View {
                     
                     // Logo y título principal
                     VStack(spacing: 25) {
-                        // Logo con efecto glow
                         LogoWithGlow()
-                        
-                        // Título con gradiente
                         TitleSection(isSignUp: isSignUp)
                     }
                     .padding(.bottom, 50)
@@ -129,11 +787,9 @@ struct LoginView: View {
                     VStack(spacing: 30) {
                         // Toggle entre Login/Signup
                         ZStack {
-                            // Background
                             RoundedRectangle(cornerRadius: 25)
                                 .fill(Color.brandDark)
                             
-                            // Sliding indicator (behind text)
                             GeometryReader { geometry in
                                 RoundedRectangle(cornerRadius: 25)
                                     .fill(Color.brandGold)
@@ -142,9 +798,7 @@ struct LoginView: View {
                                     .animation(.spring(response: 0.5, dampingFraction: 0.8), value: isSignUp)
                             }
                             
-                            // Buttons (on top)
                             HStack(spacing: 0) {
-                                // Login tab
                                 Button(action: {
                                     withAnimation(.spring()) {
                                         isSignUp = false
@@ -157,7 +811,6 @@ struct LoginView: View {
                                         .padding(.vertical, 12)
                                 }
                                 
-                                // Signup tab
                                 Button(action: {
                                     withAnimation(.spring()) {
                                         isSignUp = true
@@ -170,40 +823,203 @@ struct LoginView: View {
                                         .padding(.vertical, 12)
                                 }
                             }
-                            .zIndex(1) // Asegura que los botones estén encima
+                            .zIndex(1)
                         }
                         
                         // Formulario
                         VStack(spacing: 20) {
                             if isSignUp {
-                                CustomTextField(
-                                    placeholder: "Nombre completo",
-                                    text: $displayName,
-                                    icon: "person.fill"
-                                )
-                                .transition(.asymmetric(
-                                    insertion: .move(edge: .top).combined(with: .opacity),
-                                    removal: .move(edge: .top).combined(with: .opacity)
-                                ))
+                                // Sección: Información de Documento
+                                VStack(alignment: .leading, spacing: 15) {
+                                    HStack {
+                                        Image(systemName: "doc.text.fill")
+                                            .foregroundColor(.brandGold)
+                                            .font(.caption)
+                                        Text("Información de Documento")
+                                            .foregroundColor(.brandLight)
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 5)
+                                    
+                                    CustomPicker(
+                                        placeholder: "Tipo de Documento",
+                                        icon: "doc.text.fill",
+                                        selection: $idTipoDocumento,
+                                        options: tiposDocumento
+                                    )
+                                    
+                                    CustomTextField(
+                                        placeholder: "Número de Documento",
+                                        text: $numeroDocumento,
+                                        icon: "number.circle.fill",
+                                        keyboardType: .numberPad
+                                    )
+                                }
+                                .padding(.bottom, 10)
+                                
+                                // Sección: Información Personal
+                                VStack(alignment: .leading, spacing: 15) {
+                                    HStack {
+                                        Image(systemName: "person.fill")
+                                            .foregroundColor(.brandGold)
+                                            .font(.caption)
+                                        Text("Información Personal")
+                                            .foregroundColor(.brandLight)
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 5)
+                                    
+                                    CustomTextField(
+                                        placeholder: "Nombre",
+                                        text: $nombre,
+                                        icon: "person.fill"
+                                    )
+                                    
+                                    CustomTextField(
+                                        placeholder: "Apellido",
+                                        text: $apellido,
+                                        icon: "person.fill"
+                                    )
+                                    
+                                    CustomTextField(
+                                        placeholder: "Nombre de Usuario",
+                                        text: $displayName,
+                                        icon: "at.circle.fill"
+                                    )
+                                    
+                                    CustomDatePicker(
+                                        placeholder: "Fecha de Nacimiento",
+                                        icon: "calendar.circle.fill",
+                                        date: $fechaNacimiento
+                                    )
+                                    
+                                    CustomSegmentedPicker(
+                                        placeholder: "Género",
+                                        icon: "person.2.fill",
+                                        selection: $idGenero,
+                                        options: generos
+                                    )
+                                }
+                                .padding(.bottom, 10)
+                                
+                                // Sección: Información de Contacto
+                                VStack(alignment: .leading, spacing: 15) {
+                                    HStack {
+                                        Image(systemName: "phone.fill")
+                                            .foregroundColor(.brandGold)
+                                            .font(.caption)
+                                        Text("Información de Contacto")
+                                            .foregroundColor(.brandLight)
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 5)
+                                    
+                                    CustomTextField(
+                                        placeholder: "Teléfono",
+                                        text: $telefono,
+                                        icon: "phone.fill",
+                                        keyboardType: .phonePad
+                                    )
+                                    
+                                    CustomTextField(
+                                        placeholder: "Dirección",
+                                        text: $direccion,
+                                        icon: "house.fill"
+                                    )
+                                }
+                                .padding(.bottom, 10)
+                                
+                                // Sección: Información Física
+                                VStack(alignment: .leading, spacing: 15) {
+                                    HStack {
+                                        Image(systemName: "figure.walk")
+                                            .foregroundColor(.brandGold)
+                                            .font(.caption)
+                                        Text("Información Física (Opcional)")
+                                            .foregroundColor(.brandLight)
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 5)
+                                    
+                                    CustomTextField(
+                                        placeholder: "Edad",
+                                        text: $edad,
+                                        icon: "calendar",
+                                        keyboardType: .numberPad
+                                    )
+                                    
+                                    CustomTextField(
+                                        placeholder: "Peso (kg)",
+                                        text: $peso,
+                                        icon: "scalemass",
+                                        keyboardType: .decimalPad
+                                    )
+                                    
+                                    CustomTextField(
+                                        placeholder: "Estatura (cm)",
+                                        text: $estatura,
+                                        icon: "ruler",
+                                        keyboardType: .decimalPad
+                                    )
+                                }
+                                .padding(.bottom, 10)
+                                
+                                // Separador visual
+                                Rectangle()
+                                    .fill(Color.brandGold.opacity(0.3))
+                                    .frame(height: 1)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 10)
                             }
                             
-                            CustomTextField(
-                                placeholder: "Email",
-                                text: $email,
-                                icon: "envelope.fill",
-                                keyboardType: .emailAddress
-                            )
-                            
-                            CustomSecureField(
-                                placeholder: "Contraseña",
-                                text: $password,
-                                showPassword: $showPassword,
-                                icon: "lock.fill"
-                            )
+                            // Sección: Credenciales de Acceso
+                            VStack(alignment: .leading, spacing: 15) {
+                                if isSignUp {
+                                    HStack {
+                                        Image(systemName: "key.fill")
+                                            .foregroundColor(.brandGold)
+                                            .font(.caption)
+                                        Text("Credenciales de Acceso")
+                                            .foregroundColor(.brandLight)
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 5)
+                                }
+                                
+                                CustomTextField(
+                                    placeholder: "Email",
+                                    text: $email,
+                                    icon: "envelope.fill",
+                                    keyboardType: .emailAddress
+                                )
+                                
+                                
+                                CustomSecureField(
+                                    placeholder: "Contraseña",
+                                    text: $password,
+                                    showPassword: $showPassword,
+                                    icon: "lock.fill"
+                                )
+                                .onChange(of: password) { _, newValue in
+                                    if newValue.count > 6 {
+                                        password = String(newValue.prefix(6))
+                                    }
+                                }
+                            }
                         }
                         .animation(.spring(), value: isSignUp)
                         
-                        // Error message
+                        // Mensaje de error/éxito
                         if !authManager.errorMessage.isEmpty {
                             HStack {
                                 Image(systemName: authManager.errorMessage.contains("📧") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
@@ -217,6 +1033,10 @@ struct LoginView: View {
                             }
                             .padding(.horizontal, 20)
                             .padding(.vertical, 10)
+                            .background(
+                                RoundedRectangle(cornerRadius: 10)
+                                    .fill((authManager.errorMessage.contains("📧") ? Color.brandSuccess : Color.brandError).opacity(0.1))
+                            )
                             .transition(.move(edge: .top).combined(with: .opacity))
                         }
                         
@@ -224,7 +1044,32 @@ struct LoginView: View {
                         Button(action: {
                             Task {
                                 if isSignUp {
-                                    await authManager.signUp(email: email, password: password, displayName: displayName)
+                                    print("🎯 INICIANDO REGISTRO DESDE BUTTON")
+                                    
+                                    // Crear objeto UserData con toda la información del formulario
+                                    let userData = UserData(
+                                        uid: "", // Se asignará automáticamente en signUp
+                                        email: email,
+                                        displayName: displayName,
+                                        idTipoDocumento: idTipoDocumento,
+                                        numeroDocumento: numeroDocumento,
+                                        nombre: nombre,
+                                        apellido: apellido,
+                                        telefono: telefono,
+                                        fechaNacimiento: fechaNacimiento,
+                                        direccion: direccion,
+                                        activo: activo,
+                                        idGenero: idGenero,
+                                        edad: edad.isEmpty ? nil : edad,
+                                        peso: peso.isEmpty ? nil : peso,
+                                        estatura: estatura.isEmpty ? nil : estatura,
+                                        fechaCreacion: Date(),
+                                        rol: "usuario"
+                                    )
+                                    
+                                    print("🎯 DATOS PREPARADOS, LLAMANDO A createUserWithFirestore")
+                                    await authManager.createUserWithFirestore(email: email, password: password, userData: userData)
+                                    print("🎯 createUserWithFirestore COMPLETADO")
                                 } else {
                                     await authManager.signIn(email: email, password: password)
                                 }
@@ -250,12 +1095,12 @@ struct LoginView: View {
                             )
                             .foregroundColor(.brandBlack)
                         }
-                        .disabled(authManager.isLoading || email.isEmpty || password.isEmpty)
-                        .opacity((email.isEmpty || password.isEmpty) ? 0.6 : 1.0)
+                        .disabled(authManager.isLoading || email.isEmpty || password.isEmpty || (isSignUp && (nombre.isEmpty || apellido.isEmpty || numeroDocumento.isEmpty)))
+                        .opacity((email.isEmpty || password.isEmpty || (isSignUp && (nombre.isEmpty || apellido.isEmpty || numeroDocumento.isEmpty))) ? 0.6 : 1.0)
                         .scaleEffect(authManager.isLoading ? 0.95 : 1.0)
                         .animation(.spring(), value: authManager.isLoading)
                         
-                        // Botón de contraseña olvidada
+                        // Link de recuperación de contraseña
                         if !isSignUp {
                             Button("¿Olvidaste tu contraseña?") {
                                 showForgotPassword = true
@@ -267,11 +1112,6 @@ struct LoginView: View {
                     }
                     .padding(.horizontal, 30)
                     .padding(.vertical, 40)
-                    .background(
-                        RoundedRectangle(cornerRadius: 30)
-                            .fill(Color.brandWhite.opacity(0.05))
-                            .backdrop(blur: 20)
-                    )
                     .overlay(
                         RoundedRectangle(cornerRadius: 30)
                             .stroke(
@@ -290,15 +1130,8 @@ struct LoginView: View {
             }
         }
         .animation(.easeInOut, value: authManager.errorMessage)
-        .alert("Recuperar Contraseña", isPresented: $showForgotPassword) {
-            Button("Cancelar", role: .cancel) { }
-            Button("Enviar") {
-                Task {
-                    await authManager.resetPassword(email: email)
+        .sheet(isPresented: $showForgotPassword) {
+            ProductionPasswordResetView() // En lugar de PasswordResetView()
                 }
-            }
-        } message: {
-            Text("Se enviará un email a: \(email)")
-        }
     }
 }

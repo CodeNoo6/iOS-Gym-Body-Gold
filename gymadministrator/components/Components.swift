@@ -497,3 +497,22 @@ struct CalendarNotification: View {
     }
     */
 }
+
+struct MainTabView: View {
+    @EnvironmentObject var authManager: AuthManager
+
+    var body: some View {
+        TabView {
+            AdminDashboard()
+                .tabItem {
+                    Label("Inicio", systemImage: "house")
+                }
+
+            UserProfileView()
+                .tabItem {
+                    Label("Perfil", systemImage: "person.circle")
+                }
+        }
+        .accentColor(.brandGold) // Color de icono activo
+    }
+}
