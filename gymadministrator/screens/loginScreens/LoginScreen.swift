@@ -263,6 +263,7 @@ struct CustomSegmentedPicker<T: Hashable>: View {
     }
 }
 
+
 // MARK: - Custom Components for Consistent Design
 @MainActor
 class AuthManager: ObservableObject {
@@ -327,6 +328,136 @@ class AuthManager: ObservableObject {
             Auth.auth().removeStateDidChangeListener(handle)
         }
     }
+    
+    func createUserWithFirestoreAndMembership(email: String, password: String, userData: UserData) async {
+           await MainActor.run {
+               self.isLoading = true
+               self.errorMessage = ""
+           }
+           
+           // Validaciones básicas
+           guard !email.isEmpty else {
+               await MainActor.run {
+                   self.errorMessage = "❌ Por favor, ingresa tu correo electrónico"
+                   self.isLoading = false
+               }
+               return
+           }
+           
+           guard !password.isEmpty else {
+               await MainActor.run {
+                   self.errorMessage = "❌ Por favor, ingresa tu contraseña"
+                   self.isLoading = false
+               }
+               return
+           }
+           
+           guard password.count >= 6 else {
+               await MainActor.run {
+                   self.errorMessage = "❌ La contraseña debe tener al menos 6 caracteres"
+                   self.isLoading = false
+               }
+               return
+           }
+
+           do {
+               // 1️⃣ Crear usuario en Firebase Auth
+               let result = try await Auth.auth().createUser(withEmail: email, password: password)
+               let uid = result.user.uid
+               print("✅ Usuario creado en Firebase Auth con UID: \(uid)")
+
+               // 2️⃣ Actualizar displayName en el perfil
+               if !userData.displayName.isEmpty {
+                   let changeRequest = result.user.createProfileChangeRequest()
+                   changeRequest.displayName = userData.displayName
+                   try await changeRequest.commitChanges()
+                   print("✅ DisplayName actualizado en Firebase Auth")
+               }
+
+               // 3️⃣ Obtener FCM token
+               print("📱 Obteniendo FCM token para el nuevo usuario...")
+               let fcmToken = await getFCMTokenForNewUser()
+               
+               // 4️⃣ Crear UserData actualizado con FCM token
+               var userDataWithFCM = UserData(
+                   uid: uid,
+                   email: userData.email,
+                   displayName: userData.displayName,
+                   idTipoDocumento: userData.idTipoDocumento,
+                   numeroDocumento: userData.numeroDocumento,
+                   nombre: userData.nombre,
+                   apellido: userData.apellido,
+                   telefono: userData.telefono,
+                   fechaNacimiento: userData.fechaNacimiento,
+                   direccion: userData.direccion,
+                   activo: userData.activo,
+                   idGenero: userData.idGenero,
+                   edad: userData.edad,
+                   peso: userData.peso,
+                   estatura: userData.estatura,
+                   fechaCreacion: userData.fechaCreacion,
+                   rol: userData.rol,
+                   fcmToken: fcmToken
+               )
+
+               // 5️⃣ Guardar en colección "usuarios"
+               let db = Firestore.firestore()
+               try await db.collection("usuarios").document(uid).setData(userDataWithFCM.dictionary)
+               print("✅ Usuario guardado en Firestore")
+               
+               // 6️⃣ ✨ NUEVO: Crear membresía inactiva automáticamente
+               await createDefaultMembership(for: userDataWithFCM, in: db)
+               
+               // 7️⃣ Enviar notificación de bienvenida
+               if let token = fcmToken {
+                   await sendWelcomeNotification(to: token, userName: userData.nombre)
+               }
+               
+               await MainActor.run {
+                   self.errorMessage = ""
+               }
+           } catch {
+               await MainActor.run {
+                   self.errorMessage = self.translateFirebaseError(error)
+                   print("❌ Error creando usuario: \(error.localizedDescription)")
+               }
+           }
+
+           await MainActor.run {
+               self.isLoading = false
+           }
+       }
+        
+        // ✨ NUEVA FUNCIÓN: Crear membresía por defecto
+    private func createDefaultMembership(for userData: UserData, in db: Firestore) async {
+            do {
+                // ✅ CORRECCIÓN 1: Crear diccionario sin valores nil
+                var defaultMembership: [String: Any] = [
+                    "userUID": userData.uid,
+                    "email": userData.email,
+                    "tipoMembresia": "Básica",
+                    "precio": 80000.0,
+                    "fechaInicio": "",
+                    "fechaVencimiento": "",
+                    "activa": false,
+                    "estadoDescripcion": "Pendiente de Activación",
+                    "fechaCreacion": Timestamp(),
+                    "requiereActivacion": true
+                ]
+                
+                // ✅ CORRECCIÓN 2: Solo agregamos diasRestantes si tiene valor
+                // En este caso, para membresías inactivas, simplemente no lo incluimos
+                
+                // Generar ID único para la membresía
+                let membershipRef = db.collection("membresias").document()
+                try await membershipRef.setData(defaultMembership)
+                
+                print("✅ Membresía inactiva creada para usuario: \(userData.nombre)")
+                
+            } catch {
+                print("❌ Error creando membresía por defecto: \(error.localizedDescription)")
+            }
+        }
     
     // ✅ FUNCIÓN PARA TRADUCIR ERRORES DE FIREBASE
     private func translateFirebaseError(_ error: Error) -> String {
@@ -1044,32 +1175,33 @@ struct LoginView: View {
                         Button(action: {
                             Task {
                                 if isSignUp {
-                                    print("🎯 INICIANDO REGISTRO DESDE BUTTON")
-                                    
-                                    // Crear objeto UserData con toda la información del formulario
-                                    let userData = UserData(
-                                        uid: "", // Se asignará automáticamente en signUp
-                                        email: email,
-                                        displayName: displayName,
-                                        idTipoDocumento: idTipoDocumento,
-                                        numeroDocumento: numeroDocumento,
-                                        nombre: nombre,
-                                        apellido: apellido,
-                                        telefono: telefono,
-                                        fechaNacimiento: fechaNacimiento,
-                                        direccion: direccion,
-                                        activo: activo,
-                                        idGenero: idGenero,
-                                        edad: edad.isEmpty ? nil : edad,
-                                        peso: peso.isEmpty ? nil : peso,
-                                        estatura: estatura.isEmpty ? nil : estatura,
-                                        fechaCreacion: Date(),
-                                        rol: "usuario"
-                                    )
-                                    
-                                    print("🎯 DATOS PREPARADOS, LLAMANDO A createUserWithFirestore")
-                                    await authManager.createUserWithFirestore(email: email, password: password, userData: userData)
-                                    print("🎯 createUserWithFirestore COMPLETADO")
+                                            print("🎯 INICIANDO REGISTRO DESDE BUTTON")
+                                            
+                                            // Crear objeto UserData con toda la información del formulario
+                                            let userData = UserData(
+                                                uid: "", // Se asignará automáticamente en signUp
+                                                email: email,
+                                                displayName: displayName,
+                                                idTipoDocumento: idTipoDocumento,
+                                                numeroDocumento: numeroDocumento,
+                                                nombre: nombre,
+                                                apellido: apellido,
+                                                telefono: telefono,
+                                                fechaNacimiento: fechaNacimiento,
+                                                direccion: direccion,
+                                                activo: activo,
+                                                idGenero: idGenero,
+                                                edad: edad.isEmpty ? nil : edad,
+                                                peso: peso.isEmpty ? nil : peso,
+                                                estatura: estatura.isEmpty ? nil : estatura,
+                                                fechaCreacion: Date(),
+                                                rol: "usuario"
+                                            )
+                                            
+                                            print("🎯 DATOS PREPARADOS, LLAMANDO A createUserWithFirestoreAndMembership")
+                                            // ✅ NUEVA FUNCIÓN QUE CREA USUARIO + MEMBRESÍA INACTIVA
+                                            await authManager.createUserWithFirestoreAndMembership(email: email, password: password, userData: userData)
+                                            print("🎯 createUserWithFirestoreAndMembership COMPLETADO")
                                 } else {
                                     await authManager.signIn(email: email, password: password)
                                 }

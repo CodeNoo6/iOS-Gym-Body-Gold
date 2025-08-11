@@ -128,9 +128,99 @@ struct MembershipInfoCard: View {
     }
 }
 
+struct AllNotificationsView: View {
+    @ObservedObject var notificationManager: NotificationManager
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.brandBlack.ignoresSafeArea()
+                
+                if notificationManager.notifications.isEmpty {
+                    // Vista vacía
+                    VStack(spacing: 20) {
+                        Image(systemName: "bell.slash")
+                            .font(.system(size: 60))
+                            .foregroundColor(.brandGold.opacity(0.5))
+                        
+                        Text("No hay notificaciones")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.brandLight)
+                        
+                        Text("Cuando recibas notificaciones aparecerán aquí")
+                            .font(.subheadline)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                        
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding()
+                } else {
+                    // Lista de notificaciones
+                    ScrollView {
+                        LazyVStack(spacing: 12) {
+                            ForEach(notificationManager.notifications) { notification in
+                                NotificationCardView(
+                                    notification: notification,
+                                    onRead: {
+                                        notificationManager.markAsRead(notification)
+                                    },
+                                    onDelete: {
+                                        withAnimation(.spring()) {
+                                            notificationManager.deleteNotification(notification)
+                                        }
+                                    }
+                                )
+                                .transition(.asymmetric(
+                                    insertion: .scale.combined(with: .opacity),
+                                    removal: .opacity.combined(with: .move(edge: .trailing))
+                                ))
+                            }
+                        }
+                        .padding()
+                    }
+                }
+            }
+            .navigationTitle("Todas las Notificaciones")
+            .navigationBarTitleDisplayMode(.large)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cerrar") {
+                        dismiss()
+                    }
+                    .foregroundColor(.brandGold)
+                }
+                
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Menu {
+                        Button("Marcar todas como leídas") {
+                            notificationManager.markAllAsRead()
+                        }
+                        
+                        if !notificationManager.notifications.isEmpty {
+                            Divider()
+                            Button("Limpiar todas", role: .destructive) {
+                                notificationManager.clearAllNotifications()
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                            .foregroundColor(.brandGold)
+                    }
+                }
+            }
+            .preferredColorScheme(.dark)
+        }
+    }
+}
+
+
 struct CalendarNotification: View {
     @StateObject private var notificationManager = NotificationManager()
     @State private var selectedTab = 0
+    @State private var showAllNotifications = false
     @State private var showCalendarView = false
     @State private var showExcuseForm = false
     @State private var showClassForm = false
@@ -148,6 +238,9 @@ struct CalendarNotification: View {
         .background(cardBackground)
         .overlay(cardBorder)
         .brandShadow()
+        .sheet(isPresented: $showAllNotifications) {
+                    AllNotificationsView(notificationManager: notificationManager)
+                }
     }
     
     // MARK: - Computed Properties
@@ -220,16 +313,13 @@ struct CalendarNotification: View {
             Spacer()
             
             // Menú de opciones para notificaciones
-            /*Menu {
-                Button("Agregar notificación de prueba") {
-                    notificationManager.addTestNotification()
-                }
+            Menu {
                 
                 if !notificationManager.notifications.isEmpty {
                     Divider()
                     
                     Button("Marcar todas como leídas") {
-                        notificationManager.markAllAsRead()
+                        showAllNotifications = true
                     }
                     
                     Button("Limpiar todas", role: .destructive) {
@@ -240,7 +330,7 @@ struct CalendarNotification: View {
                 Image(systemName: "ellipsis.circle")
                     .foregroundColor(.brandLight)
                     .font(.title3)
-            }*/
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 20)
@@ -307,23 +397,21 @@ struct CalendarNotification: View {
                     )
                     .transition(.scale.combined(with: .opacity))
                 }
-                
                 if notificationManager.notifications.count > 5 {
-                    Button(action: {
-                        // Mostrar vista completa de notificaciones
-                        showCalendarView = true
-                    }) {
-                        HStack {
-                            Text("Ver todas las notificaciones (\(notificationManager.notifications.count))")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                            Image(systemName: "arrow.right")
-                                .font(.caption2)
-                        }
-                        .foregroundColor(.brandLight)
-                        .padding(.top, 8)
-                    }
-                }
+                                    Button(action: {
+                                        showAllNotifications = true // ✅ Variable corregida
+                                    }) {
+                                        HStack {
+                                            Text("Ver todas las notificaciones (\(notificationManager.notifications.count))")
+                                                .font(.caption)
+                                                .fontWeight(.medium)
+                                            Image(systemName: "arrow.right")
+                                                .font(.caption2)
+                                        }
+                                        .foregroundColor(.brandLight)
+                                        .padding(.top, 8)
+                                    }
+                                }
             }
         }
     }

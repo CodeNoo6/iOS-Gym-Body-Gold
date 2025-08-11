@@ -797,9 +797,8 @@ struct BroadcastMessageSheet: View {
 struct AdminHeaderCard: View {
     let authManager: AuthManager
     let dashboardManager: DashboardManager
-    @StateObject private var userManager = AdminUserManager()
-    @State private var isSendingTestNotification = false
-    @State private var showingBroadcastSheet = false // ✅ Agregar esta variable
+    @StateObject private var membershipManager = AdminMembershipManager()
+    @State private var showingBroadcastSheet = false
     
     var body: some View {
         VStack(spacing: 16) {
@@ -814,37 +813,71 @@ struct AdminHeaderCard: View {
                         .font(.headline)
                         .foregroundColor(.brandLight)
                     
-                    Text("Gestiona usuarios y configuraciones del sistema")
+                    Text("Gestiona membresías y configuraciones del sistema")
                         .font(.subheadline)
                         .foregroundColor(.brandLight.opacity(0.7))
                 }
                 
                 Spacer()
                 
-                // ✅ AGREGAR: Botón para mensaje masivo
-                Button(action: {
-                    showingBroadcastSheet = true
-                }) {
+                // Botones de acción rápida
+                HStack(spacing: 12) {
+                    // Estadísticas rápidas
                     VStack(spacing: 4) {
-                        Image(systemName: "megaphone.fill")
+                        let activeCount = membershipManager.memberships.filter { $0.activa }.count
+                        Text("\(activeCount)")
                             .font(.title2)
-                            .foregroundColor(.brandBlack)
+                            .fontWeight(.bold)
+                            .foregroundColor(.green)
                         
-                        Text("Mensaje\nMasivo")
+                        Text("Activas")
                             .font(.caption2)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.brandBlack)
-                            .multilineTextAlignment(.center)
+                            .foregroundColor(.brandLight.opacity(0.7))
                     }
-                    .padding(12)
-                    .background(
-                        LinearGradient(
-                            colors: [Color.orange, Color.orange.opacity(0.8)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                    .padding(8)
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(8)
+                    
+                    VStack(spacing: 4) {
+                        let inactiveCount = membershipManager.memberships.filter { !$0.activa }.count
+                        Text("\(inactiveCount)")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.orange)
+                        
+                        Text("Pendientes")
+                            .font(.caption2)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                    }
+                    .padding(8)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(8)
+                    
+                    // Botón de mensaje masivo
+                    Button(action: {
+                        showingBroadcastSheet = true
+                    }) {
+                        VStack(spacing: 4) {
+                            Image(systemName: "megaphone.fill")
+                                .font(.title2)
+                                .foregroundColor(.brandBlack)
+                            
+                            Text("Mensaje\nMasivo")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.brandBlack)
+                                .multilineTextAlignment(.center)
+                        }
+                        .padding(12)
+                        .background(
+                            LinearGradient(
+                                colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
                         )
-                    )
-                    .cornerRadius(10)
+                        .cornerRadius(10)
+                    }
                 }
             }
         }
@@ -861,22 +894,12 @@ struct AdminHeaderCard: View {
             RoundedRectangle(cornerRadius: 16)
                 .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
         )
-        // ✅ AGREGAR: Sheet para mensaje masivo
-        .sheet(isPresented: $showingBroadcastSheet) {
-            BroadcastMessageSheet(userManager: userManager)
+        .onAppear {
+            membershipManager.loadAllMemberships()
         }
-    }
-    
-    private func sendTestNotification() async {
-        isSendingTestNotification = true
-        
-        await userManager.sendTestNotificationToSpecificToken()
-        
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-        
-        isSendingTestNotification = false
-        
-        print("📱 Notificación de prueba enviada al token específico")
+        .sheet(isPresented: $showingBroadcastSheet) {
+            BroadcastMessageSheet(userManager: AdminUserManager())
+        }
     }
 }
 
@@ -1488,6 +1511,1143 @@ class AdminUserManager: ObservableObject {
     }
 }
 
+// MARK: - Nuevo AdminMembershipManager para gestionar membresías
+@MainActor
+class AdminMembershipManager: ObservableObject {
+    @Published var memberships: [MembershipData] = []
+    @Published var isLoading = false
+    @Published var errorMessage = ""
+    
+    private let db = Firestore.firestore()
+    
+    func loadAllMemberships() {
+        isLoading = true
+        errorMessage = ""
+        
+        db.collection("membresias")
+            .addSnapshotListener { [weak self] snapshot, error in
+                DispatchQueue.main.async {
+                    self?.isLoading = false
+                    
+                    if let error = error {
+                        self?.errorMessage = "Error al cargar membresías: \(error.localizedDescription)"
+                        print("❌ Error cargando membresías: \(error.localizedDescription)")
+                        return
+                    }
+                    
+                    guard let documents = snapshot?.documents else {
+                        self?.errorMessage = "No se encontraron membresías"
+                        return
+                    }
+                    
+                    self?.memberships = documents.compactMap { doc in
+                        return MembershipData(from: doc)
+                    }
+                    
+                    print("✅ Cargadas \(self?.memberships.count ?? 0) membresías")
+                }
+            }
+    }
+    
+    func toggleMembershipStatus(membershipId: String, userEmail: String, currentStatus: Bool) async {
+        do {
+            let newStatus = !currentStatus
+            
+            if newStatus {
+                // Activar membresía - establecer fechas
+                let startDate = Date()
+                let endDate = Calendar.current.date(byAdding: .month, value: 1, to: startDate) ?? Date()
+                let daysRemaining = Calendar.current.dateComponents([.day], from: Date(), to: endDate).day ?? 0
+                
+                try await db.collection("membresias").document(membershipId).updateData([
+                    "activa": true,
+                    "estadoDescripcion": "Activa",
+                    "fechaInicio": DateFormatter.membershipFormatter.string(from: startDate),
+                    "fechaVencimiento": DateFormatter.membershipFormatter.string(from: endDate),
+                    "diasRestantes": daysRemaining,
+                    "requiereActivacion": false,
+                    "fechaActivacion": Timestamp()
+                ])
+                
+                print("✅ Membresía activada para: \(userEmail)")
+                
+                // Enviar notificación de activación
+                await sendMembershipNotification(
+                    userEmail: userEmail,
+                    isActivation: true,
+                    membershipType: "Básica"
+                )
+                
+            } else {
+                // Desactivar membresía
+                try await db.collection("membresias").document(membershipId).updateData([
+                    "activa": false,
+                    "estadoDescripcion": "Suspendida",
+                    "fechaDesactivacion": Timestamp()
+                ])
+                
+                print("✅ Membresía desactivada para: \(userEmail)")
+                
+                // Enviar notificación de suspensión
+                await sendMembershipNotification(
+                    userEmail: userEmail,
+                    isActivation: false,
+                    membershipType: "Básica"
+                )
+            }
+            
+        } catch {
+            await MainActor.run {
+                errorMessage = "Error al cambiar estado de membresía: \(error.localizedDescription)"
+                print("❌ Error cambiando estado de membresía: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    private func sendMembershipNotification(userEmail: String, isActivation: Bool, membershipType: String) async {
+        // Buscar FCM token del usuario
+        do {
+            let snapshot = try await db.collection("usuarios")
+                .whereField("email", isEqualTo: userEmail)
+                .getDocuments()
+            
+            guard let userDoc = snapshot.documents.first,
+                  let fcmToken = userDoc.data()["fcmToken"] as? String,
+                  let userName = userDoc.data()["nombre"] as? String else {
+                print("❌ No se encontró FCM token para el usuario: \(userEmail)")
+                return
+            }
+            
+            let title = isActivation ?
+                "🎉 ¡Membresía Activada!" :
+                "⚠️ Membresía Suspendida"
+            
+            let body = isActivation ?
+                "¡Hola \(userName)! Tu membresía \(membershipType) ha sido activada. ¡Ya puedes entrenar!" :
+                "Hola \(userName), tu membresía \(membershipType) ha sido suspendida. Contacta al gimnasio para más información."
+            
+            await FCMNotificationManager.shared.sendNotificationToUser(
+                userId: userDoc.documentID,
+                title: title,
+                body: body,
+                data: [
+                    "type": "membership_status",
+                    "action": isActivation ? "activated" : "suspended",
+                    "membershipType": membershipType,
+                    "timestamp": "\(Date().timeIntervalSince1970)"
+                ],
+                directToken: fcmToken
+            )
+            
+        } catch {
+            print("❌ Error enviando notificación de membresía: \(error.localizedDescription)")
+        }
+    }
+}
+
+// MARK: - Modelo de datos para membresías en admin panel
+struct MembershipData: Identifiable {
+    let id: String
+    let userUID: String
+    let email: String
+    let tipoMembresia: String
+    let precio: Double
+    let fechaInicio: String
+    let fechaVencimiento: String
+    let activa: Bool
+    let estadoDescripcion: String
+    let diasRestantes: Int?
+    let requiereActivacion: Bool
+    
+    // ✅ Inicializador desde datos de Firestore
+    init(from document: QueryDocumentSnapshot) {
+        let data = document.data()
+        self.id = document.documentID
+        self.userUID = data["userUID"] as? String ?? ""
+        self.email = data["email"] as? String ?? ""
+        self.tipoMembresia = data["tipoMembresia"] as? String ?? ""
+        self.precio = data["precio"] as? Double ?? 0.0
+        self.fechaInicio = data["fechaInicio"] as? String ?? ""
+        self.fechaVencimiento = data["fechaVencimiento"] as? String ?? ""
+        self.activa = data["activa"] as? Bool ?? false
+        self.estadoDescripcion = data["estadoDescripcion"] as? String ?? ""
+        self.diasRestantes = data["diasRestantes"] as? Int // ✅ Maneja nil correctamente
+        self.requiereActivacion = data["requiereActivacion"] as? Bool ?? false
+    }
+    
+    // ✅ Inicializador desde DocumentSnapshot (para usuarios individuales)
+    init(from document: DocumentSnapshot) {
+        guard let data = document.data() else {
+            // Valores por defecto si no hay datos
+            self.id = document.documentID
+            self.userUID = ""
+            self.email = ""
+            self.tipoMembresia = ""
+            self.precio = 0.0
+            self.fechaInicio = ""
+            self.fechaVencimiento = ""
+            self.activa = false
+            self.estadoDescripcion = ""
+            self.diasRestantes = nil
+            self.requiereActivacion = false
+            return
+        }
+        
+        self.id = document.documentID
+        self.userUID = data["userUID"] as? String ?? ""
+        self.email = data["email"] as? String ?? ""
+        self.tipoMembresia = data["tipoMembresia"] as? String ?? ""
+        self.precio = data["precio"] as? Double ?? 0.0
+        self.fechaInicio = data["fechaInicio"] as? String ?? ""
+        self.fechaVencimiento = data["fechaVencimiento"] as? String ?? ""
+        self.activa = data["activa"] as? Bool ?? false
+        self.estadoDescripcion = data["estadoDescripcion"] as? String ?? ""
+        self.diasRestantes = data["diasRestantes"] as? Int
+        self.requiereActivacion = data["requiereActivacion"] as? Bool ?? false
+    }
+    
+    // ✅ Inicializador manual (para casos específicos)
+    init(
+        id: String,
+        userUID: String,
+        email: String,
+        tipoMembresia: String,
+        precio: Double,
+        fechaInicio: String,
+        fechaVencimiento: String,
+        activa: Bool,
+        estadoDescripcion: String,
+        diasRestantes: Int? = nil,
+        requiereActivacion: Bool
+    ) {
+        self.id = id
+        self.userUID = userUID
+        self.email = email
+        self.tipoMembresia = tipoMembresia
+        self.precio = precio
+        self.fechaInicio = fechaInicio
+        self.fechaVencimiento = fechaVencimiento
+        self.activa = activa
+        self.estadoDescripcion = estadoDescripcion
+        self.diasRestantes = diasRestantes
+        self.requiereActivacion = requiereActivacion
+    }
+}
+
+// MARK: - DateFormatter para membresías
+extension DateFormatter {
+    static let membershipFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+}
+
+// MARK: - AdminMembershipsListCard (Nueva tarjeta para el panel admin)
+struct AdminMembershipsListCard: View {
+    @StateObject private var membershipManager = AdminMembershipManager()
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("💳 Membresías")
+                    .font(.headline)
+                    .foregroundColor(.brandLight)
+                
+                Spacer()
+                
+                // Badge con cantidad pendientes
+                let pendingCount = membershipManager.memberships.filter { $0.requiereActivacion }.count
+                if pendingCount > 0 {
+                    Text("\(pendingCount)")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(.brandBlack)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.orange)
+                        .cornerRadius(12)
+                }
+            }
+            
+            if membershipManager.memberships.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "creditcard.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(.brandGold.opacity(0.5))
+                    
+                    Text("No hay membresías registradas")
+                        .font(.subheadline)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+            } else {
+                LazyVStack(spacing: 12) {
+                    ForEach(membershipManager.memberships) { membership in
+                        AdminMembershipRow(membership: membership, manager: membershipManager)
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .background(Color.brandDark)
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+        )
+        .onAppear {
+            membershipManager.loadAllMemberships()
+        }
+    }
+}
+
+// MARK: - Fila individual de membresía para admin
+struct AdminMembershipRow: View {
+    let membership: MembershipData
+    @ObservedObject var manager: AdminMembershipManager
+    @State private var isToggling = false
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icono de membresía
+            ZStack {
+                Circle()
+                    .fill(membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
+                    .frame(width: 50, height: 50)
+                
+                Image(systemName: membership.activa ? "creditcard.fill" : "creditcard.trianglebadge.exclamationmark")
+                    .font(.title3)
+                    .foregroundColor(membership.activa ? .green : .orange)
+            }
+            
+            // Info de la membresía
+            VStack(alignment: .leading, spacing: 4) {
+                Text(membership.email)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.brandLight)
+                
+                Text(membership.tipoMembresia)
+                    .font(.caption)
+                    .foregroundColor(.brandGold)
+                
+                HStack(spacing: 8) {
+                    Text(membership.estadoDescripcion)
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2)
+                        )
+                        .foregroundColor(membership.activa ? .green : .orange)
+                        .cornerRadius(6)
+                    
+                    if membership.activa, let dias = membership.diasRestantes {
+                        Text("\(dias) días")
+                            .font(.caption2)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            // Controles
+            VStack(spacing: 8) {
+                // Precio
+                Text("$\(Int(membership.precio).formatted())")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.brandGold)
+                
+                // Botón de activar/desactivar
+                Button(action: {
+                    Task {
+                        await toggleMembershipStatus()
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        if isToggling {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle(tint: .brandWhite))
+                                .scaleEffect(0.7)
+                        } else {
+                            Image(systemName: membership.activa ? "pause.circle.fill" : "play.circle.fill")
+                                .font(.caption)
+                            
+                            Text(membership.activa ? "Suspender" : "Activar")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                        }
+                    }
+                    .foregroundColor(.brandWhite)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(membership.activa ? Color.red.opacity(0.8) : Color.green.opacity(0.8))
+                    .cornerRadius(6)
+                }
+                .disabled(isToggling)
+                .scaleEffect(isToggling ? 0.95 : 1.0)
+                .animation(.spring(response: 0.3), value: isToggling)
+            }
+        }
+        .padding(12)
+        .background(Color.brandBlack.opacity(0.3))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(membership.activa ? Color.green.opacity(0.3) : Color.orange.opacity(0.3), lineWidth: 1)
+        )
+    }
+    
+    private func toggleMembershipStatus() async {
+        isToggling = true
+        
+        await manager.toggleMembershipStatus(
+            membershipId: membership.id,
+            userEmail: membership.email,
+            currentStatus: membership.activa
+        )
+        
+        // Pequeño delay para mejor UX
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        
+        isToggling = false
+    }
+}
+
+
+// MARK: - Membresía Card para Usuarios
+struct MembresiaCard: View {
+    @ObservedObject var miembroManager: MiembroManager
+    let authManager: AuthManager
+    @State private var currentMembresia: Membresia?
+    @State private var isLoading = true
+    @StateObject private var membresiaManager = MembresiaManager()
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // Header
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("💳 Mi Membresía")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.brandGold)
+                    
+                    if isLoading {
+                        Text("Cargando...")
+                            .font(.subheadline)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                    } else if let membresia = currentMembresia {
+                        Text(membresia.tipoMembresia)
+                            .font(.subheadline)
+                            .foregroundColor(.brandLight)
+                    } else {
+                        Text("Sin membresía activa")
+                            .font(.subheadline)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                    }
+                }
+                
+                Spacer()
+                
+                if let membresia = currentMembresia {
+                    VStack(spacing: 4) {
+                        Text("Estado")
+                            .font(.caption2)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        
+                        Text(membresia.estadoDescripcion)
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                membresia.estadoDescripcion == "Activa" ?
+                                Color.green.opacity(0.2) : Color.orange.opacity(0.2)
+                            )
+                            .foregroundColor(
+                                membresia.estadoDescripcion == "Activa" ?
+                                .green : .orange
+                            )
+                            .cornerRadius(8)
+                    }
+                }
+            }
+            
+            if !isLoading {
+                if let membresia = currentMembresia {
+                    // Información de la membresía
+                    VStack(spacing: 12) {
+                        // Fechas
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Fecha de Inicio")
+                                    .font(.caption)
+                                    .foregroundColor(.brandLight.opacity(0.7))
+                                Text(membresia.fechaInicio)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.brandLight)
+                            }
+                            
+                            Spacer()
+                            
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Text("Vencimiento")
+                                    .font(.caption)
+                                    .foregroundColor(.brandLight.opacity(0.7))
+                                Text(membresia.fechaVencimiento)
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.brandLight)
+                            }
+                        }
+                        
+                        // Precio y días restantes
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Precio Mensual")
+                                    .font(.caption)
+                                    .foregroundColor(.brandLight.opacity(0.7))
+                                Text("$\(Int(membresia.precio).formatted())")
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.brandGold)
+                            }
+                            
+                            Spacer()
+                            
+                            if let diasRestantes = membresia.diasRestantes {
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text("Días Restantes")
+                                        .font(.caption)
+                                        .foregroundColor(.brandLight.opacity(0.7))
+                                    
+                                    HStack(spacing: 4) {
+                                        if diasRestantes <= 7 {
+                                            Image(systemName: "exclamationmark.triangle.fill")
+                                                .foregroundColor(.orange)
+                                                .font(.caption)
+                                        }
+                                        
+                                        Text("\(diasRestantes)")
+                                            .font(.title3)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(
+                                                diasRestantes <= 7 ? .orange :
+                                                diasRestantes <= 3 ? .red : .brandGold
+                                            )
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // Barra de progreso si hay días restantes
+                        if let diasRestantes = membresia.diasRestantes {
+                            let totalDias = calculateTotalDays(membresia: membresia)
+                            let progreso = max(0, min(1, Double(totalDias - diasRestantes) / Double(totalDias)))
+                            
+                            VStack(spacing: 8) {
+                                HStack {
+                                    Text("Progreso de Membresía")
+                                        .font(.caption)
+                                        .foregroundColor(.brandLight.opacity(0.7))
+                                    Spacer()
+                                    Text("\(Int(progreso * 100))%")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.brandGold)
+                                }
+                                
+                                ProgressView(value: progreso)
+                                    .progressViewStyle(LinearProgressViewStyle(tint: .brandGold))
+                                    .background(Color.brandLight.opacity(0.2))
+                                    .cornerRadius(4)
+                            }
+                        }
+                        
+                        // Botón de renovación si está por vencer
+                        if let diasRestantes = membresia.diasRestantes, diasRestantes <= 15 {
+                            Button(action: {
+                                // Acción para renovar membresía
+                                print("Renovar membresía solicitada")
+                            }) {
+                                HStack {
+                                    Image(systemName: "arrow.clockwise")
+                                    Text("Renovar Membresía")
+                                        .fontWeight(.semibold)
+                                }
+                                .foregroundColor(.brandBlack)
+                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity)
+                                .background(
+                                    LinearGradient(
+                                        colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    )
+                                )
+                                .cornerRadius(10)
+                            }
+                        }
+                    }
+                } else {
+                    // Sin membresía activa
+                    VStack(spacing: 16) {
+                        Image(systemName: "creditcard.trianglebadge.exclamationmark")
+                            .font(.system(size: 40))
+                            .foregroundColor(.brandGold.opacity(0.5))
+                        
+                        Text("No tienes una membresía activa")
+                            .font(.subheadline)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                            .multilineTextAlignment(.center)
+                        
+                        Button(action: {
+                            // Acción para obtener membresía
+                            print("Obtener membresía solicitada")
+                        }) {
+                            HStack {
+                                Image(systemName: "plus.circle.fill")
+                                Text("Obtener Membresía")
+                                    .fontWeight(.semibold)
+                            }
+                            .foregroundColor(.brandBlack)
+                            .padding(.vertical, 12)
+                            .frame(maxWidth: .infinity)
+                            .background(
+                                LinearGradient(
+                                    colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .cornerRadius(10)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            LinearGradient(
+                colors: [Color.brandDark, Color.brandDark.opacity(0.8)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
+        .onAppear {
+            loadUserMembresia()
+        }
+    }
+    
+    // ✅ FUNCIÓN CORREGIDA para Main Actor
+    private func loadUserMembresia() {
+        Task {
+            // ✅ Acceder a currentUserData de forma segura
+            let userData = await MainActor.run { authManager.currentUserData }
+            
+            guard let userData = userData else {
+                await MainActor.run {
+                    isLoading = false
+                }
+                return
+            }
+            
+            // Cargar miembros y membresías en paralelo
+            await miembroManager.loadMiembros()
+            await membresiaManager.loadMembresias()
+            
+            // Buscar el miembro por email del usuario autenticado
+            if let miembro = miembroManager.miembros.first(where: { $0.email == userData.email }) {
+                // Buscar la membresía activa para este miembro
+                currentMembresia = membresiaManager.getMembresiaForMiembro(idMiembro: miembro.idMiembro)
+            }
+            
+            await MainActor.run {
+                isLoading = false
+            }
+        }
+    }
+    
+    private func calculateTotalDays(membresia: Membresia) -> Int {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        
+        guard let startDate = formatter.date(from: membresia.fechaInicio),
+              let endDate = formatter.date(from: membresia.fechaVencimiento) else {
+            return 30 // Default a 30 días si no se puede calcular
+        }
+        
+        return Calendar.current.dateComponents([.day], from: startDate, to: endDate).day ?? 30
+    }
+}
+
+// MARK: - UserMembershipCard con listener en tiempo real
+
+struct UserMembershipCard: View {
+    let authManager: AuthManager
+    @State private var userMembership: MembershipData?
+    @State private var isLoading = true
+    @State private var membershipListener: ListenerRegistration?
+    
+    private let db = Firestore.firestore()
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            // Header
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("💳 Mi Membresía")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.brandGold)
+                    
+                    if isLoading {
+                        Text("Cargando...")
+                            .font(.subheadline)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                    } else if let membership = userMembership {
+                        Text(membership.tipoMembresia)
+                            .font(.subheadline)
+                            .foregroundColor(.brandLight)
+                    } else {
+                        Text("Sin membresía registrada")
+                            .font(.subheadline)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                    }
+                }
+                
+                Spacer()
+                
+                if let membership = userMembership {
+                    VStack(spacing: 4) {
+                        Text("Estado")
+                            .font(.caption2)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        
+                        // ✅ Animación para cambios de estado
+                        Text(membership.estadoDescripcion)
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(
+                                membership.activa ?
+                                Color.green.opacity(0.2) : Color.orange.opacity(0.2)
+                            )
+                            .foregroundColor(
+                                membership.activa ?
+                                .green : .orange
+                            )
+                            .cornerRadius(8)
+                            .animation(.spring(response: 0.5), value: membership.activa)
+                    }
+                }
+            }
+            
+            if !isLoading {
+                if let membership = userMembership {
+                    if membership.activa {
+                        // Membresía activa - mostrar información completa
+                        activeMembershipView(membership: membership)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .leading).combined(with: .opacity),
+                                removal: .move(edge: .trailing).combined(with: .opacity)
+                            ))
+                    } else {
+                        // Membresía inactiva - mostrar estado pendiente
+                        inactiveMembershipView(membership: membership)
+                            .transition(.asymmetric(
+                                insertion: .move(edge: .trailing).combined(with: .opacity),
+                                removal: .move(edge: .leading).combined(with: .opacity)
+                            ))
+                    }
+                } else {
+                    // Sin membresía
+                    noMembershipView()
+                        .transition(.opacity)
+                }
+            }
+        }
+        .padding(20)
+        .background(
+            LinearGradient(
+                colors: [Color.brandDark, Color.brandDark.opacity(0.8)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
+        .onAppear {
+            setupRealtimeMembershipListener()
+        }
+        .onDisappear {
+            // ✅ Limpiar listener cuando la vista desaparece
+            membershipListener?.remove()
+        }
+        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: userMembership?.activa)
+    }
+    
+    // MARK: - Vista para membresía activa
+    @ViewBuilder
+    private func activeMembershipView(membership: MembershipData) -> some View {
+        VStack(spacing: 12) {
+            // Fechas
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Fecha de Inicio")
+                        .font(.caption)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                    Text(membership.fechaInicio)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.brandLight)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("Vencimiento")
+                        .font(.caption)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                    Text(membership.fechaVencimiento)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.brandLight)
+                }
+            }
+            
+            // Precio y días restantes
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Precio Mensual")
+                        .font(.caption)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                    Text("$\(Int(membership.precio).formatted())")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(.brandGold)
+                }
+                
+                Spacer()
+                
+                if let diasRestantes = membership.diasRestantes {
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("Días Restantes")
+                            .font(.caption)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        
+                        HStack(spacing: 4) {
+                            if diasRestantes <= 7 {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.orange)
+                                    .font(.caption)
+                            }
+                            
+                            Text("\(diasRestantes)")
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(
+                                    diasRestantes <= 7 ? .orange :
+                                    diasRestantes <= 3 ? .red : .brandGold
+                                )
+                        }
+                    }
+                }
+            }
+            
+            // Barra de progreso
+            if let diasRestantes = membership.diasRestantes {
+                let totalDias = 30 // Asumiendo membresía mensual
+                let progreso = max(0, min(1, Double(totalDias - diasRestantes) / Double(totalDias)))
+                
+                VStack(spacing: 8) {
+                    HStack {
+                        Text("Progreso de Membresía")
+                            .font(.caption)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        Spacer()
+                        Text("\(Int(progreso * 100))%")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.brandGold)
+                    }
+                    
+                    ProgressView(value: progreso)
+                        .progressViewStyle(LinearProgressViewStyle(tint: .brandGold))
+                        .background(Color.brandLight.opacity(0.2))
+                        .cornerRadius(4)
+                }
+            }
+            
+            // Botón de renovación si está por vencer
+            if let diasRestantes = membership.diasRestantes, diasRestantes <= 15 {
+                Button(action: {
+                    print("Solicitar renovación de membresía")
+                }) {
+                    HStack {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Solicitar Renovación")
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(.brandBlack)
+                    .padding(.vertical, 12)
+                    .frame(maxWidth: .infinity)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .cornerRadius(10)
+                }
+            }
+            
+            // ✅ Mensaje de celebración para membresía recién activada
+            if membership.requiereActivacion == false {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Text("¡Membresía activada exitosamente!")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                        .fontWeight(.semibold)
+                }
+                .padding(.vertical, 8)
+                .transition(.scale.combined(with: .opacity))
+            }
+        }
+    }
+    
+    // MARK: - Vista para membresía inactiva
+    @ViewBuilder
+    private func inactiveMembershipView(membership: MembershipData) -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "clock.badge.exclamationmark")
+                .font(.system(size: 40))
+                .foregroundColor(.orange)
+                .symbolEffect(.pulse, options: .repeating)
+            
+            VStack(spacing: 8) {
+                Text("Membresía Pendiente de Activación")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.brandLight)
+                    .multilineTextAlignment(.center)
+                
+                Text("Tu membresía \(membership.tipoMembresia) está registrada pero aún no ha sido activada por el administrador.")
+                    .font(.caption)
+                    .foregroundColor(.brandLight.opacity(0.7))
+                    .multilineTextAlignment(.center)
+                
+                Text("Precio: $\(Int(membership.precio).formatted())/mes")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.brandGold)
+            }
+            
+            // Información de contacto
+            VStack(spacing: 8) {
+                Text("Contacta al gimnasio para activar tu membresía")
+                    .font(.caption2)
+                    .foregroundColor(.brandLight.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                
+                Button(action: {
+                    print("Contactar gimnasio")
+                }) {
+                    HStack {
+                        Image(systemName: "phone.fill")
+                        Text("Contactar Gimnasio")
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(.brandBlack)
+                    .padding(.vertical, 10)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.orange.opacity(0.8))
+                    .cornerRadius(8)
+                }
+                
+                // ✅ Botón para refrescar manualmente
+                Button(action: {
+                    refreshMembership()
+                }) {
+                    HStack {
+                        Image(systemName: "arrow.clockwise")
+                        Text("Actualizar Estado")
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundColor(.brandLight)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity)
+                    .background(Color.brandDark.opacity(0.5))
+                    .cornerRadius(8)
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
+    // MARK: - Vista para sin membresía
+    @ViewBuilder
+    private func noMembershipView() -> some View {
+        VStack(spacing: 16) {
+            Image(systemName: "creditcard.trianglebadge.exclamationmark")
+                .font(.system(size: 40))
+                .foregroundColor(.brandGold.opacity(0.5))
+            
+            Text("No tienes una membresía registrada")
+                .font(.subheadline)
+                .foregroundColor(.brandLight.opacity(0.7))
+                .multilineTextAlignment(.center)
+            
+            Button(action: {
+                print("Solicitar membresía")
+            }) {
+                HStack {
+                    Image(systemName: "plus.circle.fill")
+                    Text("Solicitar Membresía")
+                        .fontWeight(.semibold)
+                }
+                .foregroundColor(.brandBlack)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity)
+                .background(
+                    LinearGradient(
+                        colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .cornerRadius(10)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
+    // MARK: - ✅ FUNCIÓN PRINCIPAL: Listener en tiempo real
+    private func setupRealtimeMembershipListener() {
+        Task {
+            let userData = await MainActor.run { authManager.currentUserData }
+            
+            guard let userData = userData else {
+                await MainActor.run {
+                    isLoading = false
+                }
+                return
+            }
+            
+            // ✅ Configurar listener en tiempo real
+            await MainActor.run {
+                membershipListener = db.collection("membresias")
+                    .whereField("userUID", isEqualTo: userData.uid)
+                    .addSnapshotListener { snapshot, error in
+                        if let error = error {
+                            print("❌ Error en listener de membresía: \(error.localizedDescription)")
+                            return
+                        }
+                        
+                        guard let snapshot = snapshot else {
+                            print("⚠️ Snapshot de membresía vacío")
+                            return
+                        }
+                        
+                        // ✅ Actualizar UI cuando cambian los datos
+                        DispatchQueue.main.async {
+                            if let doc = snapshot.documents.first {
+                                let newMembership = MembershipData(from: doc)
+                                
+                                // ✅ Detectar cambio de estado para animaciones
+                                let wasInactive = userMembership?.activa == false
+                                let isNowActive = newMembership.activa == true
+                                
+                                userMembership = newMembership
+                                
+                                // ✅ Mostrar celebración si se activó
+                                if wasInactive && isNowActive {
+                                    showActivationCelebration()
+                                }
+                                
+                                print("✅ Membresía actualizada en tiempo real: \(newMembership.estadoDescripcion)")
+                            } else {
+                                userMembership = nil
+                                print("⚠️ No se encontró membresía para el usuario")
+                            }
+                            
+                            isLoading = false
+                        }
+                    }
+            }
+        }
+    }
+    
+    // MARK: - Función para refrescar manualmente
+    private func refreshMembership() {
+        Task {
+            let userData = await MainActor.run { authManager.currentUserData }
+            
+            guard let userData = userData else { return }
+            
+            await MainActor.run {
+                isLoading = true
+            }
+            
+            do {
+                let snapshot = try await db.collection("membresias")
+                    .whereField("userUID", isEqualTo: userData.uid)
+                    .getDocuments()
+                
+                await MainActor.run {
+                    if let doc = snapshot.documents.first {
+                        userMembership = MembershipData(from: doc)
+                        print("✅ Membresía refrescada manualmente")
+                    }
+                    isLoading = false
+                }
+                
+            } catch {
+                print("❌ Error refrescando membresía: \(error.localizedDescription)")
+                await MainActor.run {
+                    isLoading = false
+                }
+            }
+        }
+    }
+    
+    // MARK: - Celebración de activación
+    private func showActivationCelebration() {
+        // Aquí podrías agregar efectos adicionales como:
+        // - Haptic feedback
+        // - Sonidos
+        // - Animaciones especiales
+        
+        DispatchQueue.main.async {
+            let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+            impactFeedback.impactOccurred()
+            
+            print("🎉 ¡Membresía activada! Mostrando celebración")
+        }
+    }
+}
+
 
 // MARK: - AdminDashboard con roles
 struct AdminDashboard: View {
@@ -1499,8 +2659,6 @@ struct AdminDashboard: View {
     
     var body: some View {
         let isIPad = UIDevice.current.userInterfaceIdiom == .pad
-        
-        // Verificar el rol del usuario
         let userRole = authManager.currentUserData?.rol ?? "usuario"
         
         if isIPad {
@@ -1523,7 +2681,7 @@ struct AdminDashboard: View {
         }
     }
     
-    // MARK: - iPad Admin Content
+    // MARK: - iPad Admin Content (CON SISTEMA DE RECORDATORIOS)
     private var iPadAdminContent: some View {
         GeometryReader { geometry in
             ZStack {
@@ -1531,13 +2689,13 @@ struct AdminDashboard: View {
                 
                 ScrollView {
                     VStack(spacing: 20) {
-                        // Header para admin
+                        // Header administrativo
                         AdminHeaderCard(authManager: authManager, dashboardManager: dashboardManager)
                         
-                        // Lista de usuarios con rol administrador
-                        AdminUsersListCard()
+                        // Gestión de membresías
+                        AdminMembershipsListCard()
                         
-                        // Chat IA (también disponible para admin)
+                        // Chat IA
                         IAChatCard()
                         
                         Spacer(minLength: 100)
@@ -1562,23 +2720,25 @@ struct AdminDashboard: View {
             }
             .onAppear {
                 dashboardManager.loadDashboardData()
+                // ✅ El PaymentReminderManager se inicia automáticamente
             }
             .preferredColorScheme(.dark)
         }
     }
     
-    // MARK: - iPhone Admin Content
+    // MARK: - iPhone Admin Content (CON SISTEMA DE RECORDATORIOS)
     private var iPhoneAdminContent: some View {
         ZStack {
             Color.brandBlack.ignoresSafeArea(.all)
             
             ScrollView {
                 VStack(spacing: 20) {
-                    // Header para admin
+                    // Header administrativo
                     AdminHeaderCard(authManager: authManager, dashboardManager: dashboardManager)
+                
                     
-                    // Lista de usuarios con rol administrador
-                    AdminUsersListCard()
+                    // Gestión de membresías
+                    AdminMembershipsListCard()
                     
                     // Chat IA
                     IAChatCard()
@@ -1605,11 +2765,12 @@ struct AdminDashboard: View {
         }
         .onAppear {
             dashboardManager.loadDashboardData()
+            // ✅ El PaymentReminderManager se inicia automáticamente
         }
         .preferredColorScheme(.dark)
     }
     
-    // MARK: - iPad User Content (interfaz normal)
+    // MARK: - iPad User Content (CON MONITOREO PERSONAL)
     private var iPadUserContent: some View {
         GeometryReader { geometry in
             ZStack {
@@ -1617,9 +2778,18 @@ struct AdminDashboard: View {
                 
                 ScrollView {
                     VStack(spacing: 20) {
+                        // Header con información personal
                         HeaderCard(authManager: authManager, dashboardManager: dashboardManager, miembroManager: miembroManager)
+                        
+                        // Tarjeta de membresía personal (ya tiene el sistema de tiempo real)
+                        UserMembershipCard(authManager: authManager)
+                        
+                        // Chat IA
                         IAChatCard()
+                        
+                        // Calendario de notificaciones
                         CalendarNotification()
+                        
                         Spacer(minLength: 100)
                     }
                     .padding(.horizontal, 16)
@@ -1647,16 +2817,25 @@ struct AdminDashboard: View {
         }
     }
     
-    // MARK: - iPhone User Content (interfaz normal)
+    // MARK: - iPhone User Content (CON MONITOREO PERSONAL)
     private var iPhoneUserContent: some View {
         ZStack {
             Color.brandBlack.ignoresSafeArea(.all)
             
             ScrollView {
                 VStack(spacing: 20) {
+                    // Header con información personal
                     HeaderCard(authManager: authManager, dashboardManager: dashboardManager, miembroManager: miembroManager)
+                    
+                    // Tarjeta de membresía personal (ya tiene el sistema de tiempo real)
+                    UserMembershipCard(authManager: authManager)
+                    
+                    // Chat IA
                     IAChatCard()
+                    
+                    // Calendario de notificaciones
                     CalendarNotification()
+                    
                     Spacer(minLength: 100)
                 }
                 .padding(.horizontal, 16)
