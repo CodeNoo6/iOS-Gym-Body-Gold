@@ -7,6 +7,10 @@
 
 import Foundation
 import SwiftUI
+import Foundation
+import UserNotifications
+import FirebaseFirestore
+import SwiftUI
 
 // MARK: - Header Card
 struct HeaderCard: View {
@@ -216,6 +220,54 @@ struct AllNotificationsView: View {
     }
 }
 
+struct PaymentReminder: Identifiable, Codable {
+    let id: String
+    let userUID: String
+    let email: String
+    let tipoMembresia: String
+    let precio: Double
+    let fechaVencimiento: String
+    let diasRestantes: Int
+    
+    var formattedPrice: String {
+        return "$\(Int(precio).formatted())"
+    }
+    
+    var isUrgent: Bool {
+        return diasRestantes <= 1
+    }
+    
+    // ✅ Inicializador desde DocumentSnapshot
+    init(from document: QueryDocumentSnapshot) {
+        let data = document.data()
+        self.id = document.documentID
+        self.userUID = data["userUID"] as? String ?? ""
+        self.email = data["email"] as? String ?? ""
+        self.tipoMembresia = data["tipoMembresia"] as? String ?? ""
+        self.precio = data["precio"] as? Double ?? 0.0
+        self.fechaVencimiento = data["fechaVencimiento"] as? String ?? ""
+        self.diasRestantes = data["diasRestantes"] as? Int ?? 0
+    }
+    
+    // ✅ Inicializador manual
+    init(
+        id: String,
+        userUID: String,
+        email: String,
+        tipoMembresia: String,
+        precio: Double,
+        fechaVencimiento: String,
+        diasRestantes: Int
+    ) {
+        self.id = id
+        self.userUID = userUID
+        self.email = email
+        self.tipoMembresia = tipoMembresia
+        self.precio = precio
+        self.fechaVencimiento = fechaVencimiento
+        self.diasRestantes = diasRestantes
+    }
+}
 
 struct CalendarNotification: View {
     @StateObject private var notificationManager = NotificationManager()
@@ -224,6 +276,8 @@ struct CalendarNotification: View {
     @State private var showCalendarView = false
     @State private var showExcuseForm = false
     @State private var showClassForm = false
+    @State private var upcomingPayments: [PaymentReminder] = []
+    @StateObject private var reminderManager = PaymentReminderManager.shared
     
     // Tabs para el selector - COMENTADAS las de clases y excusas
     private let tabs = ["Notificaciones"] //, "Clases", "Excusas"]

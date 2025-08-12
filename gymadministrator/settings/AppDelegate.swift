@@ -25,6 +25,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         FirebaseApp.configure()
         print("✅ Firebase configurado exitosamente")
         
+        PaymentReminderManager.initializeOnAppStart()
+        
         // Setup auth listener
         setupAuthListener()
         

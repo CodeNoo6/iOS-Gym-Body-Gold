@@ -794,10 +794,12 @@ struct BroadcastMessageSheet: View {
 }
 
 // MARK: - Admin Header Card
+
 struct AdminHeaderCard: View {
     let authManager: AuthManager
     let dashboardManager: DashboardManager
     @StateObject private var membershipManager = AdminMembershipManager()
+    @StateObject private var reminderManager = PaymentReminderManager.shared // ✅ NUEVO
     @State private var showingBroadcastSheet = false
     
     var body: some View {
@@ -836,6 +838,22 @@ struct AdminHeaderCard: View {
                     }
                     .padding(8)
                     .background(Color.green.opacity(0.1))
+                    .cornerRadius(8)
+                    
+                    // ✅ NUEVO: Recordatorios de pago
+                    VStack(spacing: 4) {
+                        let paymentReminders = reminderManager.getUpcomingPaymentsCount()
+                        Text("\(paymentReminders)")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.orange)
+                        
+                        Text("Por vencer")
+                            .font(.caption2)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                    }
+                    .padding(8)
+                    .background(Color.orange.opacity(0.1))
                     .cornerRadius(8)
                     
                     VStack(spacing: 4) {
@@ -896,13 +914,13 @@ struct AdminHeaderCard: View {
         )
         .onAppear {
             membershipManager.loadAllMemberships()
+            reminderManager.startMonitoring() // ✅ NUEVO: Auto-iniciar recordatorios
         }
         .sheet(isPresented: $showingBroadcastSheet) {
             BroadcastMessageSheet(userManager: AdminUserManager())
         }
     }
 }
-
 // MARK: - Admin Users List Card
 struct AdminUsersListCard: View {
     @StateObject private var userManager = AdminUserManager()
@@ -2201,11 +2219,44 @@ struct UserMembershipCard: View {
     @State private var userMembership: MembershipData?
     @State private var isLoading = true
     @State private var membershipListener: ListenerRegistration?
+    @State private var showingPaymentAlert = false
+    
+    
+    private var isPaymentDue: Bool {
+            guard let membership = userMembership,
+                  let days = membership.diasRestantes else { return false }
+            return days <= 1 && membership.activa
+        }
     
     private let db = Firestore.firestore()
     
     var body: some View {
         VStack(spacing: 16) {
+            if isPaymentDue {
+                            HStack {
+                                Image(systemName: "exclamationmark.triangle.fill")
+                                    .foregroundColor(.orange)
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("¡Pago Pendiente!")
+                                        .font(.subheadline)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.orange)
+                                    
+                                    Text("Tu membresía vence pronto. Renueva para continuar.")
+                                        .font(.caption)
+                                        .foregroundColor(.brandLight.opacity(0.8))
+                                }
+                            }
+                            .padding(12)
+                            .background(Color.orange.opacity(0.1))
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                            )
+                            .animation(.spring(response: 0.5), value: isPaymentDue)
+                        }
             // Header
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
@@ -2305,6 +2356,30 @@ struct UserMembershipCard: View {
         .animation(.spring(response: 0.6, dampingFraction: 0.8), value: userMembership?.activa)
     }
     
+    private func makePhoneCall() {
+        let phoneNumber = "3022973150"
+        
+        // ✅ Crear URL de teléfono
+        if let phoneURL = URL(string: "tel://\(phoneNumber)") {
+            
+            // ✅ Verificar si el dispositivo puede hacer llamadas
+            if UIApplication.shared.canOpenURL(phoneURL) {
+                UIApplication.shared.open(phoneURL, options: [:]) { success in
+                    if success {
+                        print("✅ Abriendo app de teléfono para llamar a: \(phoneNumber)")
+                    } else {
+                        print("❌ Error abriendo app de teléfono")
+                    }
+                }
+            } else {
+                print("⚠️ Este dispositivo no puede hacer llamadas")
+            }
+        } else {
+            print("❌ URL de teléfono inválida")
+        }
+    }
+
+    
     // MARK: - Vista para membresía activa
     @ViewBuilder
     private func activeMembershipView(membership: MembershipData) -> some View {
@@ -2400,24 +2475,19 @@ struct UserMembershipCard: View {
             // Botón de renovación si está por vencer
             if let diasRestantes = membership.diasRestantes, diasRestantes <= 15 {
                 Button(action: {
-                    print("Solicitar renovación de membresía")
+                    // ✅ Función para abrir la app de teléfono
+                    makePhoneCall()
                 }) {
                     HStack {
-                        Image(systemName: "arrow.clockwise")
-                        Text("Solicitar Renovación")
+                        Image(systemName: "phone.fill")
+                        Text("Contactar Gimnasio")
                             .fontWeight(.semibold)
                     }
                     .foregroundColor(.brandBlack)
-                    .padding(.vertical, 12)
+                    .padding(.vertical, 10)
                     .frame(maxWidth: .infinity)
-                    .background(
-                        LinearGradient(
-                            colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .cornerRadius(10)
+                    .background(Color.orange.opacity(0.8))
+                    .cornerRadius(8)
                 }
             }
             
@@ -2483,22 +2553,6 @@ struct UserMembershipCard: View {
                     .padding(.vertical, 10)
                     .frame(maxWidth: .infinity)
                     .background(Color.orange.opacity(0.8))
-                    .cornerRadius(8)
-                }
-                
-                // ✅ Botón para refrescar manualmente
-                Button(action: {
-                    refreshMembership()
-                }) {
-                    HStack {
-                        Image(systemName: "arrow.clockwise")
-                        Text("Actualizar Estado")
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.brandLight)
-                    .padding(.vertical, 8)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.brandDark.opacity(0.5))
                     .cornerRadius(8)
                 }
             }
@@ -2695,6 +2749,12 @@ struct AdminDashboard: View {
                         // Gestión de membresías
                         AdminMembershipsListCard()
                         
+                        // ✅ NUEVO: Panel de recordatorios de pago
+                        PaymentReminderDashboard()
+                        
+                        // Gestión de usuarios
+                        AdminUsersListCard()
+                        
                         // Chat IA
                         IAChatCard()
                         
@@ -2720,7 +2780,8 @@ struct AdminDashboard: View {
             }
             .onAppear {
                 dashboardManager.loadDashboardData()
-                // ✅ El PaymentReminderManager se inicia automáticamente
+                // ✅ IMPORTANTE: Inicializar sistema de recordatorios
+                PaymentReminderManager.shared.startMonitoring()
             }
             .preferredColorScheme(.dark)
         }
@@ -2735,10 +2796,15 @@ struct AdminDashboard: View {
                 VStack(spacing: 20) {
                     // Header administrativo
                     AdminHeaderCard(authManager: authManager, dashboardManager: dashboardManager)
-                
                     
                     // Gestión de membresías
                     AdminMembershipsListCard()
+                    
+                    // ✅ NUEVO: Panel de recordatorios de pago
+                    PaymentReminderDashboard()
+                    
+                    // Gestión de usuarios
+                    AdminUsersListCard()
                     
                     // Chat IA
                     IAChatCard()
@@ -2765,7 +2831,8 @@ struct AdminDashboard: View {
         }
         .onAppear {
             dashboardManager.loadDashboardData()
-            // ✅ El PaymentReminderManager se inicia automáticamente
+            // ✅ IMPORTANTE: Inicializar sistema de recordatorios
+            PaymentReminderManager.shared.startMonitoring()
         }
         .preferredColorScheme(.dark)
     }

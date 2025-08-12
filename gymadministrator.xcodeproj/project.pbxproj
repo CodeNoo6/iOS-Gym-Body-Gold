@@ -15,6 +15,7 @@
 		C97FFB322E483F15007EA53B /* LoginScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB312E483F15007EA53B /* LoginScreen.swift */; };
 		C97FFB342E483F69007EA53B /* HomeScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB332E483F69007EA53B /* HomeScreen.swift */; };
 		C97FFB372E483FA9007EA53B /* Components.swift in Sources */ = {isa = PBXBuildFile; fileRef = C97FFB362E483FA9007EA53B /* Components.swift */; };
+		C986BA282E4A6C7E00C7BA95 /* PaymentReminderManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = C986BA272E4A6C7E00C7BA95 /* PaymentReminderManager.swift */; };
 		C9D8105C2E326BCB00599272 /* gymadministratorApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D8105B2E326BCB00599272 /* gymadministratorApp.swift */; };
 		C9D8105E2E326BCB00599272 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9D8105D2E326BCB00599272 /* ContentView.swift */; };
 		C9D810602E326BCD00599272 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C9D8105F2E326BCD00599272 /* Assets.xcassets */; };
@@ -78,6 +79,7 @@
 		C97FFB312E483F15007EA53B /* LoginScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoginScreen.swift; sourceTree = "<group>"; };
 		C97FFB332E483F69007EA53B /* HomeScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeScreen.swift; sourceTree = "<group>"; };
 		C97FFB362E483FA9007EA53B /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		C986BA272E4A6C7E00C7BA95 /* PaymentReminderManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PaymentReminderManager.swift; sourceTree = "<group>"; };
 		C9D810582E326BCB00599272 /* gymadministrator.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = gymadministrator.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C9D8105B2E326BCB00599272 /* gymadministratorApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = gymadministratorApp.swift; sourceTree = "<group>"; };
 		C9D8105D2E326BCB00599272 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
@@ -148,6 +150,7 @@
 			children = (
 				C97FFB232E480EE3007EA53B /* NotificationModel.swift */,
 				C9E4EF182E32D2DB00CCE3D8 /* FirebaseModel.swift */,
+				C986BA272E4A6C7E00C7BA95 /* PaymentReminderManager.swift */,
 			);
 			path = models;
 			sourceTree = "<group>";
@@ -438,6 +441,7 @@
 			files = (
 				C97FFB242E480EE3007EA53B /* NotificationModel.swift in Sources */,
 				C9E4EF192E32D2DB00CCE3D8 /* FirebaseModel.swift in Sources */,
+				C986BA282E4A6C7E00C7BA95 /* PaymentReminderManager.swift in Sources */,
 				C9EE19F52E495CFE00F54F5E /* FcmManager.swift in Sources */,
 				C97FFB372E483FA9007EA53B /* Components.swift in Sources */,
 				C9EE19F32E49326400F54F5E /* ProductionPasswordResetManager.swift in Sources */,
