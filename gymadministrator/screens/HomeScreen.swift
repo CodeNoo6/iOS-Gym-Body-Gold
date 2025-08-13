@@ -1108,6 +1108,187 @@ struct StatItem: View {
     }
 }
 
+
+struct UserAccountStatusCard: View {
+    @ObservedObject var statusManager: AccountStatusManager
+    
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Image(systemName: statusManager.isUserActive ? "checkmark.shield.fill" : "xmark.shield.fill")
+                    .font(.title2)
+                    .foregroundColor(statusManager.isUserActive ? .green : .red)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Estado de Cuenta")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.brandLight)
+                    
+                    Text(statusManager.isUserActive ? "Activa" : "Desactivada")
+                        .font(.caption)
+                        .foregroundColor(statusManager.isUserActive ? .green : .red)
+                }
+                
+                Spacer()
+                
+                if !statusManager.isUserActive {
+                    VStack(spacing: 4) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                            .font(.caption)
+                        
+                        Text("Acceso\nLimitado")
+                            .font(.caption2)
+                            .foregroundColor(.orange)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+            }
+            
+            if !statusManager.isUserActive {
+                VStack(spacing: 8) {
+                    Text("Tu cuenta ha sido desactivada temporalmente")
+                        .font(.caption)
+                        .foregroundColor(.brandLight.opacity(0.8))
+                        .multilineTextAlignment(.center)
+                    
+                    Button(action: {
+                        makePhoneCall()
+                    }) {
+                        HStack {
+                            Image(systemName: "phone.fill")
+                            Text("Contactar Gimnasio")
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundColor(.brandWhite)
+                        .padding(.vertical, 8)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.orange.opacity(0.8))
+                        .cornerRadius(8)
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .background(
+            statusManager.isUserActive ?
+            Color.green.opacity(0.1) : Color.red.opacity(0.1)
+        )
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(
+                    statusManager.isUserActive ?
+                    Color.green.opacity(0.3) : Color.red.opacity(0.3),
+                    lineWidth: 1
+                )
+        )
+        .animation(.spring(response: 0.5), value: statusManager.isUserActive)
+    }
+    
+    private func makePhoneCall() {
+        let phoneNumber = "3022973150"
+        
+        if let phoneURL = URL(string: "tel://\(phoneNumber)") {
+            if UIApplication.shared.canOpenURL(phoneURL) {
+                UIApplication.shared.open(phoneURL, options: [:])
+            }
+        }
+    }
+}
+
+@MainActor
+class AccountStatusManager: ObservableObject {
+    @Published var isUserActive: Bool = true
+    @Published var userRole: String = "usuario"
+    @Published var isLoading: Bool = true
+    
+    private var userListener: ListenerRegistration?
+    private let db = Firestore.firestore()
+    
+    // MARK: - Configurar listener para el estado del usuario
+    func setupUserStatusListener(userUID: String) {
+        print("🔄 Configurando listener de estado para userUID: \(userUID)")
+        
+        // ✅ IMPORTANTE: Limpiar listener anterior si existe
+        cleanup()
+        
+        // Configurar nuevo listener
+        userListener = db.collection("usuarios").document(userUID)
+            .addSnapshotListener { [weak self] snapshot, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("❌ Error en listener de estado de usuario: \(error.localizedDescription)")
+                        return
+                    }
+                    
+                    guard let snapshot = snapshot,
+                          let data = snapshot.data() else {
+                        print("⚠️ No se encontraron datos del usuario")
+                        return
+                    }
+                    
+                    let newActiveStatus = data["activo"] as? Bool ?? true
+                    let newRole = data["rol"] as? String ?? "usuario"
+                    
+                    print("📋 Estado de usuario actualizado:")
+                    print("- UID: \(userUID)")
+                    print("- Activo: \(newActiveStatus)")
+                    print("- Rol: \(newRole)")
+                    
+                    // Detectar cambio de estado
+                    let previousStatus = self?.isUserActive
+                    
+                    // ✅ ACTUALIZAR CON ANIMACIÓN
+                    withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                        self?.isUserActive = newActiveStatus
+                        self?.userRole = newRole
+                        self?.isLoading = false
+                    }
+                    
+                    // Mostrar notificación local si el estado cambió
+                    if let previous = previousStatus, previous != newActiveStatus {
+                        self?.showStatusChangeNotification(isActive: newActiveStatus)
+                    }
+                }
+            }
+    }
+    
+    // MARK: - Mostrar notificación local de cambio de estado
+    private func showStatusChangeNotification(isActive: Bool) {
+        let content = UNMutableNotificationContent()
+        content.title = isActive ? "✅ Cuenta Activada" : "🚫 Cuenta Desactivada"
+        content.body = isActive ?
+            "Tu cuenta ha sido reactivada. ¡Ya puedes usar todas las funciones!" :
+            "Tu cuenta ha sido desactivada. Contacta al administrador para más información."
+        content.sound = .default
+        
+        let request = UNNotificationRequest(
+            identifier: "account_status_\(Date().timeIntervalSince1970)",
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        )
+        
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                print("❌ Error mostrando notificación local: \(error.localizedDescription)")
+            } else {
+                print("✅ Notificación local mostrada para cambio de estado")
+            }
+        }
+    }
+    
+    // MARK: - ✅ CORREGIDO: Limpiar listener
+    func cleanup() {
+        print("🧹 Limpiando listener de estado de usuario...")
+        userListener?.remove()
+        userListener = nil
+    }
+}
+
+
+
 @MainActor
 class AdminUserManager: ObservableObject {
     @Published var adminUsers: [UserData] = []
@@ -2000,134 +2181,268 @@ struct AdminMembershipRowWithCustomDays: View {
     @State private var isToggling = false
     @State private var showingActivationSheet = false
     
+    // Computed properties para mejor legibilidad
+    private var statusColor: Color {
+        membership.activa ? .green : .orange
+    }
+    
+    private var statusIcon: String {
+        membership.activa ? "checkmark.circle.fill" : "clock.circle.fill"
+    }
+    
+    private var backgroundGradient: LinearGradient {
+        LinearGradient(
+            gradient: Gradient(colors: [
+                Color.brandBlack.opacity(0.4),
+                Color.brandBlack.opacity(0.2)
+            ]),
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
     var body: some View {
-        HStack(spacing: 12) {
-            // Icono de membresía
-            ZStack {
-                Circle()
-                    .fill(membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
-                    .frame(width: 50, height: 50)
-                
-                Image(systemName: membership.activa ? "creditcard.fill" : "creditcard.trianglebadge.exclamationmark")
-                    .font(.title3)
-                    .foregroundColor(membership.activa ? .green : .orange)
-            }
+        HStack(spacing: 16) {
+            // Avatar y estado mejorado
+            membershipAvatar
             
-            // Info de la membresía
-            VStack(alignment: .leading, spacing: 4) {
-                Text(membership.email)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.brandLight)
-                
-                Text(membership.tipoMembresia)
-                    .font(.caption)
-                    .foregroundColor(.brandGold)
-                
-                HStack(spacing: 8) {
-                    Text(membership.estadoDescripcion)
-                        .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2)
-                        )
-                        .foregroundColor(membership.activa ? .green : .orange)
-                        .cornerRadius(6)
-                    
-                    if membership.activa, let dias = membership.diasRestantes {
-                        Text("\(dias) días")
-                            .font(.caption2)
-                            .foregroundColor(.brandLight.opacity(0.7))
-                    }
-                    
-                    // ✅ NUEVO: Mostrar duración original si existe
-                    if let duracion = membership.duracionDias {
-                        Text("(\(duracion)d original)")
-                            .font(.caption2)
-                            .foregroundColor(.brandGold.opacity(0.7))
-                    }
-                }
-            }
+            // Información principal
+            membershipInfo
             
             Spacer()
             
-            // Controles
-            VStack(spacing: 8) {
-                // Precio
-                Text("$\(Int(membership.precio).formatted())")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.brandGold)
-                
-                // ✅ BOTONES SEGÚN EL ESTADO
-                if membership.activa {
-                    // Botón para suspender membresía activa
-                    Button(action: {
-                        Task {
-                            await suspendMembership()
-                        }
-                    }) {
-                        HStack(spacing: 4) {
-                            if isToggling {
-                                ProgressView()
-                                    .progressViewStyle(CircularProgressViewStyle(tint: .brandWhite))
-                                    .scaleEffect(0.7)
-                            } else {
-                                Image(systemName: "pause.circle.fill")
-                                    .font(.caption)
-                                
-                                Text("Suspender")
-                                    .font(.caption2)
-                                    .fontWeight(.semibold)
-                            }
-                        }
-                        .foregroundColor(.brandWhite)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.red.opacity(0.8))
-                        .cornerRadius(6)
-                    }
-                    .disabled(isToggling)
-                } else {
-                    // ✅ BOTÓN PARA ACTIVAR CON DÍAS PERSONALIZADOS
-                    Button(action: {
-                        showingActivationSheet = true
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "calendar.badge.plus")
-                                .font(.caption)
-                            
-                            Text("Activar")
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                        }
-                        .foregroundColor(.brandWhite)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(Color.green.opacity(0.8))
-                        .cornerRadius(6)
-                    }
-                }
-            }
+            // Panel de controles
+            controlPanel
         }
-        .padding(12)
-        .background(Color.brandBlack.opacity(0.3))
-        .cornerRadius(12)
+        .padding(16)
+        .background(backgroundGradient)
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(membership.activa ? Color.green.opacity(0.3) : Color.orange.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(
+                    LinearGradient(
+                        gradient: Gradient(colors: [
+                            statusColor.opacity(0.4),
+                            statusColor.opacity(0.1)
+                        ]),
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.5
+                )
         )
-        .scaleEffect(isToggling ? 0.98 : 1.0)
-        .animation(.spring(response: 0.3), value: isToggling)
-        // ✅ SHEET PARA SELECCIONAR DÍAS
+        .cornerRadius(16)
+        .shadow(
+            color: membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2),
+            radius: 8,
+            x: 0,
+            y: 4
+        )
+        .scaleEffect(isToggling ? 0.97 : 1.0)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isToggling)
         .sheet(isPresented: $showingActivationSheet) {
             MembershipActivationSheet(membership: membership, manager: manager)
         }
     }
     
+    // MARK: - Avatar y Estado
+    private var membershipAvatar: some View {
+        ZStack {
+            Image(systemName: membership.activa ? "creditcard.fill" : "creditcard.trianglebadge.exclamationmark")
+                .font(.title3)
+                .foregroundColor(membership.activa ? .green : .orange)
+        }
+    }
+    
+    // MARK: - Información de la Membresía
+    private var membershipInfo: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            // Email con mejor tipografía
+            Text(membership.email)
+                .font(.system(.subheadline, design: .rounded))
+                .fontWeight(.semibold)
+                .foregroundColor(.brandLight)
+                .lineLimit(1)
+            
+            // Tipo de membresía destacado
+            HStack(spacing: 6) {
+                Text(membership.tipoMembresia)
+                    .font(.system(.caption, design: .rounded))
+                    .fontWeight(.medium)
+                    .foregroundColor(.brandGold)
+            }
+            
+            // Estado con diseño pill mejorado
+            statusPill
+            
+            // Información de días
+            daysInfo
+        }
+    }
+    
+    private var statusPill: some View {
+        Text(membership.estadoDescripcion)
+            .font(.system(.caption2, design: .rounded))
+            .fontWeight(.semibold)
+            .foregroundColor(membership.activa ? .white : .brandBlack)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(
+                Capsule()
+                    .fill(membership.activa ? statusColor : statusColor.opacity(0.3))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(statusColor.opacity(0.5), lineWidth: 0.5)
+            )
+    }
+    
+    private var daysInfo: some View {
+        HStack(spacing: 8) {
+            if membership.activa, let dias = membership.diasRestantes {
+                Label {
+                    Text("\(dias) días restantes")
+                        .font(.system(.caption2, design: .monospaced))
+                        .fontWeight(.medium)
+                } icon: {
+                    Image(systemName: "clock")
+                        .font(.caption2)
+                }
+                .foregroundColor(.brandLight.opacity(0.8))
+            }
+            
+            if let duracion = membership.duracionDias {
+                Label {
+                    Text("\(duracion)d total")
+                        .font(.system(.caption2, design: .monospaced))
+                        .fontWeight(.medium)
+                } icon: {
+                    Image(systemName: "calendar")
+                        .font(.caption2)
+                }
+                .foregroundColor(.brandGold.opacity(0.7))
+            }
+        }
+    }
+    
+    // MARK: - Panel de Controles
+    private var controlPanel: some View {
+        VStack(spacing: 12) {
+            // Precio destacado
+            priceDisplay
+            
+            // Botón de acción principal
+            actionButton
+        }
+    }
+    
+    private var priceDisplay: some View {
+        VStack(spacing: 2) {
+            Text("PRECIO")
+                .font(.system(.caption2, design: .rounded))
+                .fontWeight(.medium)
+                .foregroundColor(.brandGold.opacity(0.6))
+            
+            Text("$\(Int(membership.precio).formatted())")
+                .font(.system(.headline, design: .rounded))
+                .fontWeight(.bold)
+                .foregroundColor(.brandGold)
+        }
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.brandGold.opacity(0.1))
+        )
+    }
+    
+    private var actionButton: some View {
+        Group {
+            if membership.activa {
+                suspendButton
+            } else {
+                activateButton
+            }
+        }
+    }
+    
+    private var suspendButton: some View {
+        Button(action: {
+            Task {
+                await suspendMembership()
+            }
+        }) {
+            HStack(spacing: 6) {
+                if isToggling {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .scaleEffect(0.8)
+                } else {
+                    Image(systemName: "pause.circle.fill")
+                        .font(.system(.caption, weight: .semibold))
+                    
+                    Text("Suspender")
+                        .font(.system(.caption, design: .rounded))
+                        .fontWeight(.semibold)
+                }
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.red, Color.red.opacity(0.8)]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.red.opacity(0.3), lineWidth: 0.5)
+            )
+            .shadow(color: Color.red.opacity(0.3), radius: 4, x: 0, y: 2)
+        }
+        .disabled(isToggling)
+        .scaleEffect(isToggling ? 0.95 : 1.0)
+    }
+    
+    private var activateButton: some View {
+        Button(action: {
+            showingActivationSheet = true
+        }) {
+            HStack(spacing: 6) {
+                Image(systemName: "calendar.badge.plus")
+                    .font(.system(.caption, weight: .semibold))
+                
+                Text("Activar")
+                    .font(.system(.caption, design: .rounded))
+                    .fontWeight(.semibold)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.green, Color.green.opacity(0.8)]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.green.opacity(0.3), lineWidth: 0.5)
+            )
+            .shadow(color: Color.green.opacity(0.3), radius: 4, x: 0, y: 2)
+        }
+        .scaleEffect(showingActivationSheet ? 0.95 : 1.0)
+        .animation(.spring(response: 0.3), value: showingActivationSheet)
+    }
+    
+    // MARK: - Actions
     private func suspendMembership() async {
-        isToggling = true
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+            isToggling = true
+        }
         
         await manager.toggleMembershipStatus(
             membershipId: membership.id,
@@ -2136,7 +2451,10 @@ struct AdminMembershipRowWithCustomDays: View {
         )
         
         try? await Task.sleep(nanoseconds: 500_000_000)
-        isToggling = false
+        
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+            isToggling = false
+        }
     }
 }
 
