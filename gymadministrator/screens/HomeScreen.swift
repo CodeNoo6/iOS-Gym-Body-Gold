@@ -819,83 +819,79 @@ struct AdminHeaderCard: View {
                         .font(.subheadline)
                         .foregroundColor(.brandLight.opacity(0.7))
                 }
+            }
+            HStack(spacing: 12) {
+                // Estadísticas rápidas
+                VStack(spacing: 4) {
+                    let activeCount = membershipManager.memberships.filter { $0.activa }.count
+                    Text("\(activeCount)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.green)
+                    
+                    Text("Activas")
+                        .font(.caption2)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                }
+                .padding(8)
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(8)
                 
-                Spacer()
+                // ✅ NUEVO: Recordatorios de pago
+                VStack(spacing: 4) {
+                    let paymentReminders = reminderManager.getUpcomingPaymentsCount()
+                    Text("\(paymentReminders)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.orange)
+                    
+                    Text("Por vencer")
+                        .font(.caption2)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                }
+                .padding(8)
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(8)
                 
-                // Botones de acción rápida
-                HStack(spacing: 12) {
-                    // Estadísticas rápidas
-                    VStack(spacing: 4) {
-                        let activeCount = membershipManager.memberships.filter { $0.activa }.count
-                        Text("\(activeCount)")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.green)
-                        
-                        Text("Activas")
-                            .font(.caption2)
-                            .foregroundColor(.brandLight.opacity(0.7))
-                    }
-                    .padding(8)
-                    .background(Color.green.opacity(0.1))
-                    .cornerRadius(8)
+                VStack(spacing: 4) {
+                    let inactiveCount = membershipManager.memberships.filter { !$0.activa }.count
+                    Text("\(inactiveCount)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.orange)
                     
-                    // ✅ NUEVO: Recordatorios de pago
+                    Text("Pendientes")
+                        .font(.caption2)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                }
+                .padding(8)
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(8)
+                
+                // Botón de mensaje masivo
+                Button(action: {
+                    showingBroadcastSheet = true
+                }) {
                     VStack(spacing: 4) {
-                        let paymentReminders = reminderManager.getUpcomingPaymentsCount()
-                        Text("\(paymentReminders)")
+                        Image(systemName: "megaphone.fill")
                             .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.orange)
+                            .foregroundColor(.brandBlack)
                         
-                        Text("Por vencer")
+                        Text("Mensaje\nMasivo")
                             .font(.caption2)
-                            .foregroundColor(.brandLight.opacity(0.7))
+                            .fontWeight(.semibold)
+                            .foregroundColor(.brandBlack)
+                            .multilineTextAlignment(.center)
                     }
-                    .padding(8)
-                    .background(Color.orange.opacity(0.1))
-                    .cornerRadius(8)
-                    
-                    VStack(spacing: 4) {
-                        let inactiveCount = membershipManager.memberships.filter { !$0.activa }.count
-                        Text("\(inactiveCount)")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.orange)
-                        
-                        Text("Pendientes")
-                            .font(.caption2)
-                            .foregroundColor(.brandLight.opacity(0.7))
-                    }
-                    .padding(8)
-                    .background(Color.orange.opacity(0.1))
-                    .cornerRadius(8)
-                    
-                    // Botón de mensaje masivo
-                    Button(action: {
-                        showingBroadcastSheet = true
-                    }) {
-                        VStack(spacing: 4) {
-                            Image(systemName: "megaphone.fill")
-                                .font(.title2)
-                                .foregroundColor(.brandBlack)
-                            
-                            Text("Mensaje\nMasivo")
-                                .font(.caption2)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.brandBlack)
-                                .multilineTextAlignment(.center)
-                        }
-                        .padding(12)
-                        .background(
-                            LinearGradient(
-                                colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            )
+                    .padding(12)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
                         )
-                        .cornerRadius(10)
-                    }
+                    )
+                    .cornerRadius(10)
                 }
             }
         }
@@ -918,57 +914,6 @@ struct AdminHeaderCard: View {
         }
         .sheet(isPresented: $showingBroadcastSheet) {
             BroadcastMessageSheet(userManager: AdminUserManager())
-        }
-    }
-}
-// MARK: - Admin Users List Card
-struct AdminUsersListCard: View {
-    @StateObject private var userManager = AdminUserManager()
-    @State private var showingBroadcastSheet = false // ✅ Agregar esta variable
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("👥 Clientes")
-                    .font(.headline)
-                    .foregroundColor(.brandLight)
-                
-                Spacer()
-            }
-            
-            if userManager.adminUsers.isEmpty {
-                VStack(spacing: 12) {
-                    Image(systemName: "person.3.sequence.fill")
-                        .font(.system(size: 40))
-                        .foregroundColor(.brandGold.opacity(0.5))
-                    
-                    Text("No hay clientes registrados")
-                        .font(.subheadline)
-                        .foregroundColor(.brandLight.opacity(0.7))
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
-            } else {
-                LazyVStack(spacing: 12) {
-                    ForEach(userManager.adminUsers, id: \.uid) { user in
-                        AdminUserRow(user: user)
-                    }
-                }
-            }
-        }
-        .padding(20)
-        .background(Color.brandDark)
-        .cornerRadius(16)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
-        )
-        .onAppear {
-            userManager.loadAdminUsers()
-        }
-        // ✅ AGREGAR: Sheet para mensaje masivo
-        .sheet(isPresented: $showingBroadcastSheet) {
-            BroadcastMessageSheet(userManager: userManager)
         }
     }
 }
@@ -1415,58 +1360,6 @@ class AdminUserManager: ObservableObject {
             
             print("📱 Notificación de activación enviada a: \(userName)")
         }
-        
-        // MARK: - Función de prueba con el token que proporcionaste
-        func sendTestNotificationToSpecificToken() async {
-            let testToken = "er6VssDxFU2pnu6YPaxuI1:APA91bFtO8-uOlawnrKp6MTPzVarysK_MeOvlvgoOmtxK2_uOjI1CIuhjatt9l7K5O6Vr5gl2-0VSUFb71d7qgscauTDqcjygqlu5CchGx6uiCxCporujRQ"
-            
-            // Crear payload de notificación
-            let payload: [String: Any] = [
-                "to": testToken,
-                "notification": [
-                    "title": "🏋️‍♂️ Gym Body Gold - Cuenta Desactivada",
-                    "body": "Tu cuenta ha sido desactivada por el administrador. Contacta al gym para más información.",
-                    "sound": "default",
-                    "badge": 1
-                ],
-                "data": [
-                    "type": "account_status",
-                    "action": "deactivated",
-                    "timestamp": "\(Date().timeIntervalSince1970)"
-                ],
-                "priority": "high"
-            ]
-            
-            guard let url = URL(string: "https://fcm.googleapis.com/fcm/send") else { return }
-            
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            
-            // IMPORTANTE: Reemplaza con tu Server Key de Firebase
-            let serverKey = "AAAA8gZ9pQY:APA91bHsample-server-key-here" // Tu server key real
-            request.setValue("key=\(serverKey)", forHTTPHeaderField: "Authorization")
-            
-            do {
-                request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-                
-                let (data, response) = try await URLSession.shared.data(for: request)
-                
-                if let httpResponse = response as? HTTPURLResponse {
-                    if httpResponse.statusCode == 200 {
-                        print("✅ Notificación de prueba enviada exitosamente")
-                        if let responseData = String(data: data, encoding: .utf8) {
-                            print("📱 Respuesta FCM: \(responseData)")
-                        }
-                    } else {
-                        print("❌ Error enviando notificación de prueba. Status: \(httpResponse.statusCode)")
-                    }
-                }
-                
-            } catch {
-                print("❌ Error en request FCM de prueba: \(error.localizedDescription)")
-            }
-        }
     
     func loadAllUsers() {
         isLoading = true
@@ -1537,6 +1430,105 @@ class AdminMembershipManager: ObservableObject {
     @Published var errorMessage = ""
     
     private let db = Firestore.firestore()
+    
+    private func getDurationText(days: Int) -> String {
+            switch days {
+            case 1: return "1 día"
+            case 7: return "1 semana"
+            case 15: return "15 días"
+            case 30: return "1 mes"
+            case 60: return "2 meses"
+            case 90: return "3 meses"
+            case 180: return "6 meses"
+            case 365: return "1 año"
+            default: return "\(days) días"
+            }
+        }
+    
+    private func sendCustomActivationNotification(
+            userEmail: String,
+            days: Int,
+            endDate: Date
+        ) async {
+            // Buscar FCM token del usuario
+            do {
+                let snapshot = try await db.collection("usuarios")
+                    .whereField("email", isEqualTo: userEmail)
+                    .getDocuments()
+                
+                guard let userDoc = snapshot.documents.first,
+                      let fcmToken = userDoc.data()["fcmToken"] as? String,
+                      let userName = userDoc.data()["nombre"] as? String else {
+                    print("❌ No se encontró FCM token para el usuario: \(userEmail)")
+                    return
+                }
+                
+                let formattedDate = DateFormatter.membershipFormatter.string(from: endDate)
+                let durationText = getDurationText(days: days)
+                
+                let title = "🎉 ¡Membresía Activada!"
+                let body = "¡Hola \(userName)! Tu membresía ha sido activada por \(durationText). Vence el \(formattedDate). ¡Ya puedes entrenar!"
+                
+                await FCMNotificationManager.shared.sendNotificationToUser(
+                    userId: userDoc.documentID,
+                    title: title,
+                    body: body,
+                    data: [
+                        "type": "membership_activated",
+                        "duration_days": "\(days)",
+                        "end_date": formattedDate,
+                        "timestamp": "\(Date().timeIntervalSince1970)"
+                    ],
+                    directToken: fcmToken
+                )
+                
+                print("📱 Notificación de activación personalizada enviada")
+                
+            } catch {
+                print("❌ Error enviando notificación: \(error.localizedDescription)")
+            }
+        }
+        
+    
+    func activateMembershipWithCustomDays(
+           membershipId: String,
+           userEmail: String,
+           days: Int
+       ) async {
+           do {
+               let startDate = Date()
+               let endDate = Calendar.current.date(byAdding: .day, value: days, to: startDate) ?? Date()
+               
+               // ✅ Actualizar membresía con días personalizados
+               try await db.collection("membresias").document(membershipId).updateData([
+                   "activa": true,
+                   "estadoDescripcion": "Activa",
+                   "fechaInicio": DateFormatter.membershipFormatter.string(from: startDate),
+                   "fechaVencimiento": DateFormatter.membershipFormatter.string(from: endDate),
+                   "diasRestantes": days,
+                   "requiereActivacion": false,
+                   "fechaActivacion": Timestamp(),
+                   "duracionDias": days // ✅ Nuevo campo para guardar la duración original
+               ])
+               
+               print("✅ Membresía activada por \(days) días para: \(userEmail)")
+               print("📅 Fecha inicio: \(DateFormatter.membershipFormatter.string(from: startDate))")
+               print("📅 Fecha vencimiento: \(DateFormatter.membershipFormatter.string(from: endDate))")
+               
+               // Enviar notificación personalizada
+               await sendCustomActivationNotification(
+                   userEmail: userEmail,
+                   days: days,
+                   endDate: endDate
+               )
+               
+           } catch {
+               await MainActor.run {
+                   errorMessage = "Error al activar membresía: \(error.localizedDescription)"
+                   print("❌ Error activando membresía: \(error.localizedDescription)")
+               }
+           }
+       }
     
     func loadAllMemberships() {
         isLoading = true
@@ -1663,7 +1655,121 @@ class AdminMembershipManager: ObservableObject {
     }
 }
 
+@MainActor
+class MembershipDayTracker: ObservableObject {
+    static let shared = MembershipDayTracker()
+    
+    @Published var needsUpdate: [String] = []
+    private let db = Firestore.firestore()
+    private var updateTimer: Timer?
+    
+    private init() {
+        startDailyUpdates()
+    }
+    
+    func startDailyUpdates() {
+        // Actualizar cada 6 horas
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 21600, repeats: true) { _ in
+            Task {
+                await self.updateAllMembershipDays()
+            }
+        }
+        
+        // Actualizar al iniciar
+        Task {
+            await updateAllMembershipDays()
+        }
+    }
+    
+    func updateAllMembershipDays() async {
+        print("🔄 Actualizando días restantes de todas las membresías...")
+        
+        do {
+            let snapshot = try await db.collection("membresias")
+                .whereField("activa", isEqualTo: true)
+                .getDocuments()
+            
+            for document in snapshot.documents {
+                let data = document.data()
+                
+                guard let fechaVencimientoString = data["fechaVencimiento"] as? String,
+                      let fechaVencimiento = DateFormatter.membershipFormatter.date(from: fechaVencimientoString) else {
+                    continue
+                }
+                
+                let today = Date()
+                let daysRemaining = Calendar.current.dateComponents([.day], from: today, to: fechaVencimiento).day ?? 0
+                
+                // Actualizar solo si cambió
+                let currentDays = data["diasRestantes"] as? Int
+                if currentDays != daysRemaining {
+                    
+                    var updateData: [String: Any] = ["diasRestantes": daysRemaining]
+                    
+                    // Si la membresía expiró, desactivarla
+                    if daysRemaining <= 0 {
+                        updateData["activa"] = false
+                        updateData["estadoDescripcion"] = "Expirada"
+                        
+                        print("⏰ Membresía expirada: \(data["email"] as? String ?? "unknown")")
+                        
+                        // Enviar notificación de expiración
+                        if let email = data["email"] as? String,
+                           let userUID = data["userUID"] as? String {
+                            await sendExpirationNotification(userUID: userUID, email: email)
+                        }
+                    }
+                    
+                    try await document.reference.updateData(updateData)
+                    print("📅 Actualizado \(data["email"] as? String ?? "unknown"): \(daysRemaining) días")
+                }
+            }
+            
+        } catch {
+            print("❌ Error actualizando días restantes: \(error.localizedDescription)")
+        }
+    }
+    
+    private func sendExpirationNotification(userUID: String, email: String) async {
+        // Buscar datos del usuario
+        do {
+            let userDoc = try await db.collection("usuarios").document(userUID).getDocument()
+            
+            guard let userData = userDoc.data(),
+                  let fcmToken = userData["fcmToken"] as? String,
+                  let userName = userData["nombre"] as? String else {
+                print("❌ No se encontró FCM token para usuario expirado: \(email)")
+                return
+            }
+            
+            let title = "⏰ Membresía Expirada"
+            let body = "Hola \(userName), tu membresía ha expirado. Renueva para seguir entrenando en Gym Body Gold."
+            
+            await FCMNotificationManager.shared.sendNotificationToUser(
+                userId: userUID,
+                title: title,
+                body: body,
+                data: [
+                    "type": "membership_expired",
+                    "action": "renew_required",
+                    "timestamp": "\(Date().timeIntervalSince1970)"
+                ],
+                directToken: fcmToken
+            )
+            
+        } catch {
+            print("❌ Error enviando notificación de expiración: \(error.localizedDescription)")
+        }
+    }
+    
+    deinit {
+        updateTimer?.invalidate()
+    }
+}
+
 // MARK: - Modelo de datos para membresías en admin panel
+
+// MARK: - MembershipData ACTUALIZADO con soporte para días personalizados
 struct MembershipData: Identifiable {
     let id: String
     let userUID: String
@@ -1676,8 +1782,10 @@ struct MembershipData: Identifiable {
     let estadoDescripcion: String
     let diasRestantes: Int?
     let requiereActivacion: Bool
+    let duracionDias: Int? // ✅ NUEVO: Duración original en días
+    let fechaActivacion: Date? // ✅ NUEVO: Cuándo se activó
     
-    // ✅ Inicializador desde datos de Firestore
+    // ✅ Inicializador desde QueryDocumentSnapshot ACTUALIZADO
     init(from document: QueryDocumentSnapshot) {
         let data = document.data()
         self.id = document.documentID
@@ -1688,15 +1796,29 @@ struct MembershipData: Identifiable {
         self.fechaInicio = data["fechaInicio"] as? String ?? ""
         self.fechaVencimiento = data["fechaVencimiento"] as? String ?? ""
         self.activa = data["activa"] as? Bool ?? false
-        self.estadoDescripcion = data["estadoDescripcion"] as? String ?? ""
-        self.diasRestantes = data["diasRestantes"] as? Int // ✅ Maneja nil correctamente
+        
+        // ✅ Estado basado en activa
+        if let estadoFromData = data["estadoDescripcion"] as? String {
+            self.estadoDescripcion = estadoFromData
+        } else {
+            self.estadoDescripcion = (data["activa"] as? Bool ?? false) ? "Activa" : "Suspendida"
+        }
+        
+        self.diasRestantes = data["diasRestantes"] as? Int
         self.requiereActivacion = data["requiereActivacion"] as? Bool ?? false
+        self.duracionDias = data["duracionDias"] as? Int // ✅ NUEVO
+        
+        // ✅ NUEVO: Fecha de activación
+        if let timestamp = data["fechaActivacion"] as? Timestamp {
+            self.fechaActivacion = timestamp.dateValue()
+        } else {
+            self.fechaActivacion = nil
+        }
     }
     
-    // ✅ Inicializador desde DocumentSnapshot (para usuarios individuales)
+    // ✅ Inicializador desde DocumentSnapshot ACTUALIZADO
     init(from document: DocumentSnapshot) {
         guard let data = document.data() else {
-            // Valores por defecto si no hay datos
             self.id = document.documentID
             self.userUID = ""
             self.email = ""
@@ -1708,6 +1830,8 @@ struct MembershipData: Identifiable {
             self.estadoDescripcion = ""
             self.diasRestantes = nil
             self.requiereActivacion = false
+            self.duracionDias = nil
+            self.fechaActivacion = nil
             return
         }
         
@@ -1719,12 +1843,25 @@ struct MembershipData: Identifiable {
         self.fechaInicio = data["fechaInicio"] as? String ?? ""
         self.fechaVencimiento = data["fechaVencimiento"] as? String ?? ""
         self.activa = data["activa"] as? Bool ?? false
-        self.estadoDescripcion = data["estadoDescripcion"] as? String ?? ""
+        
+        if let estadoFromData = data["estadoDescripcion"] as? String {
+            self.estadoDescripcion = estadoFromData
+        } else {
+            self.estadoDescripcion = (data["activa"] as? Bool ?? false) ? "Activa" : "Suspendida"
+        }
+        
         self.diasRestantes = data["diasRestantes"] as? Int
         self.requiereActivacion = data["requiereActivacion"] as? Bool ?? false
+        self.duracionDias = data["duracionDias"] as? Int
+        
+        if let timestamp = data["fechaActivacion"] as? Timestamp {
+            self.fechaActivacion = timestamp.dateValue()
+        } else {
+            self.fechaActivacion = nil
+        }
     }
     
-    // ✅ Inicializador manual (para casos específicos)
+    // ✅ Inicializador manual ACTUALIZADO
     init(
         id: String,
         userUID: String,
@@ -1736,7 +1873,9 @@ struct MembershipData: Identifiable {
         activa: Bool,
         estadoDescripcion: String,
         diasRestantes: Int? = nil,
-        requiereActivacion: Bool
+        requiereActivacion: Bool,
+        duracionDias: Int? = nil,
+        fechaActivacion: Date? = nil
     ) {
         self.id = id
         self.userUID = userUID
@@ -1749,6 +1888,38 @@ struct MembershipData: Identifiable {
         self.estadoDescripcion = estadoDescripcion
         self.diasRestantes = diasRestantes
         self.requiereActivacion = requiereActivacion
+        self.duracionDias = duracionDias
+        self.fechaActivacion = fechaActivacion
+    }
+    
+    // ✅ NUEVAS: Funciones de utilidad
+    var isExpiringSoon: Bool {
+        guard let days = diasRestantes else { return false }
+        return days <= 7 && activa
+    }
+    
+    var isExpiredToday: Bool {
+        guard let days = diasRestantes else { return false }
+        return days <= 0 && activa
+    }
+    
+    var durationText: String {
+        guard let duration = duracionDias else { return "No especificado" }
+        return getDurationText(days: duration)
+    }
+    
+    private func getDurationText(days: Int) -> String {
+        switch days {
+        case 1: return "1 día"
+        case 7: return "1 semana"
+        case 15: return "15 días"
+        case 30: return "1 mes"
+        case 60: return "2 meses"
+        case 90: return "3 meses"
+        case 180: return "6 meses"
+        case 365: return "1 año"
+        default: return "\(days) días"
+        }
     }
 }
 
@@ -1803,7 +1974,8 @@ struct AdminMembershipsListCard: View {
             } else {
                 LazyVStack(spacing: 12) {
                     ForEach(membershipManager.memberships) { membership in
-                        AdminMembershipRow(membership: membership, manager: membershipManager)
+                        // ✅ USAR LA NUEVA VERSIÓN CON DÍAS PERSONALIZADOS
+                        AdminMembershipRowWithCustomDays(membership: membership, manager: membershipManager)
                     }
                 }
             }
@@ -1820,6 +1992,154 @@ struct AdminMembershipsListCard: View {
         }
     }
 }
+
+// MARK: - AdminMembershipRowWithCustomDays - Nueva versión completa
+struct AdminMembershipRowWithCustomDays: View {
+    let membership: MembershipData
+    @ObservedObject var manager: AdminMembershipManager
+    @State private var isToggling = false
+    @State private var showingActivationSheet = false
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icono de membresía
+            ZStack {
+                Circle()
+                    .fill(membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
+                    .frame(width: 50, height: 50)
+                
+                Image(systemName: membership.activa ? "creditcard.fill" : "creditcard.trianglebadge.exclamationmark")
+                    .font(.title3)
+                    .foregroundColor(membership.activa ? .green : .orange)
+            }
+            
+            // Info de la membresía
+            VStack(alignment: .leading, spacing: 4) {
+                Text(membership.email)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.brandLight)
+                
+                Text(membership.tipoMembresia)
+                    .font(.caption)
+                    .foregroundColor(.brandGold)
+                
+                HStack(spacing: 8) {
+                    Text(membership.estadoDescripcion)
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2)
+                        )
+                        .foregroundColor(membership.activa ? .green : .orange)
+                        .cornerRadius(6)
+                    
+                    if membership.activa, let dias = membership.diasRestantes {
+                        Text("\(dias) días")
+                            .font(.caption2)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                    }
+                    
+                    // ✅ NUEVO: Mostrar duración original si existe
+                    if let duracion = membership.duracionDias {
+                        Text("(\(duracion)d original)")
+                            .font(.caption2)
+                            .foregroundColor(.brandGold.opacity(0.7))
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            // Controles
+            VStack(spacing: 8) {
+                // Precio
+                Text("$\(Int(membership.precio).formatted())")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.brandGold)
+                
+                // ✅ BOTONES SEGÚN EL ESTADO
+                if membership.activa {
+                    // Botón para suspender membresía activa
+                    Button(action: {
+                        Task {
+                            await suspendMembership()
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            if isToggling {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .brandWhite))
+                                    .scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "pause.circle.fill")
+                                    .font(.caption)
+                                
+                                Text("Suspender")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .foregroundColor(.brandWhite)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.red.opacity(0.8))
+                        .cornerRadius(6)
+                    }
+                    .disabled(isToggling)
+                } else {
+                    // ✅ BOTÓN PARA ACTIVAR CON DÍAS PERSONALIZADOS
+                    Button(action: {
+                        showingActivationSheet = true
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "calendar.badge.plus")
+                                .font(.caption)
+                            
+                            Text("Activar")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundColor(.brandWhite)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.green.opacity(0.8))
+                        .cornerRadius(6)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.brandBlack.opacity(0.3))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(membership.activa ? Color.green.opacity(0.3) : Color.orange.opacity(0.3), lineWidth: 1)
+        )
+        .scaleEffect(isToggling ? 0.98 : 1.0)
+        .animation(.spring(response: 0.3), value: isToggling)
+        // ✅ SHEET PARA SELECCIONAR DÍAS
+        .sheet(isPresented: $showingActivationSheet) {
+            MembershipActivationSheet(membership: membership, manager: manager)
+        }
+    }
+    
+    private func suspendMembership() async {
+        isToggling = true
+        
+        await manager.toggleMembershipStatus(
+            membershipId: membership.id,
+            userEmail: membership.email,
+            currentStatus: membership.activa
+        )
+        
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        isToggling = false
+    }
+}
+
 
 // MARK: - Fila individual de membresía para admin
 struct AdminMembershipRow: View {
@@ -1935,7 +2255,6 @@ struct AdminMembershipRow: View {
         isToggling = false
     }
 }
-
 
 // MARK: - Membresía Card para Usuarios
 struct MembresiaCard: View {
@@ -2091,12 +2410,12 @@ struct MembresiaCard: View {
                         // Botón de renovación si está por vencer
                         if let diasRestantes = membresia.diasRestantes, diasRestantes <= 15 {
                             Button(action: {
-                                // Acción para renovar membresía
-                                print("Renovar membresía solicitada")
+                                // ✅ MEJORADO: Llamar al gimnasio para renovar
+                                makePhoneCall()
                             }) {
                                 HStack {
-                                    Image(systemName: "arrow.clockwise")
-                                    Text("Renovar Membresía")
+                                    Image(systemName: "phone.fill")
+                                    Text("Contactar Gimnasio")
                                         .fontWeight(.semibold)
                                 }
                                 .foregroundColor(.brandBlack)
@@ -2104,7 +2423,7 @@ struct MembresiaCard: View {
                                 .frame(maxWidth: .infinity)
                                 .background(
                                     LinearGradient(
-                                        colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
+                                        colors: [Color.orange, Color.orange.opacity(0.8)],
                                         startPoint: .topLeading,
                                         endPoint: .bottomTrailing
                                     )
@@ -2126,12 +2445,12 @@ struct MembresiaCard: View {
                             .multilineTextAlignment(.center)
                         
                         Button(action: {
-                            // Acción para obtener membresía
-                            print("Obtener membresía solicitada")
+                            // ✅ MEJORADO: Llamar al gimnasio para obtener membresía
+                            makePhoneCall()
                         }) {
                             HStack {
-                                Image(systemName: "plus.circle.fill")
-                                Text("Obtener Membresía")
+                                Image(systemName: "phone.fill")
+                                Text("Solicitar Membresía")
                                     .fontWeight(.semibold)
                             }
                             .foregroundColor(.brandBlack)
@@ -2170,6 +2489,27 @@ struct MembresiaCard: View {
         }
     }
     
+    // ✅ FUNCIÓN PARA LLAMAR AL GIMNASIO
+    private func makePhoneCall() {
+        let phoneNumber = "3022973150"
+        
+        if let phoneURL = URL(string: "tel://\(phoneNumber)") {
+            if UIApplication.shared.canOpenURL(phoneURL) {
+                UIApplication.shared.open(phoneURL, options: [:]) { success in
+                    if success {
+                        print("✅ Abriendo app de teléfono para llamar a: \(phoneNumber)")
+                    } else {
+                        print("❌ Error abriendo app de teléfono")
+                    }
+                }
+            } else {
+                print("⚠️ Este dispositivo no puede hacer llamadas")
+            }
+        } else {
+            print("❌ URL de teléfono inválida")
+        }
+    }
+    
     // ✅ FUNCIÓN CORREGIDA para Main Actor
     private func loadUserMembresia() {
         Task {
@@ -2199,6 +2539,7 @@ struct MembresiaCard: View {
         }
     }
     
+    // ✅ CORREGIDO: Usar 'membresia' en lugar de 'membership'
     private func calculateTotalDays(membresia: Membresia) -> Int {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
@@ -2212,6 +2553,356 @@ struct MembresiaCard: View {
     }
 }
 
+struct MembershipActivationSheet: View {
+    let membership: MembershipData
+    let manager: AdminMembershipManager
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var selectedDays: Int = 30
+    @State private var customDays: String = "30"
+    @State private var isActivating = false
+    @State private var showingConfirmation = false
+    
+    // Opciones predefinidas de días
+    private let dayOptions = [7, 15, 30, 60, 90, 180, 365]
+    
+    var calculatedEndDate: Date {
+        Calendar.current.date(byAdding: .day, value: selectedDays, to: Date()) ?? Date()
+    }
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.brandBlack.ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Header
+                        VStack(spacing: 12) {
+                            Image(systemName: "calendar.badge.plus")
+                                .font(.system(size: 50))
+                                .foregroundColor(.brandGold)
+                            
+                            Text("Activar Membresía")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.brandGold)
+                            
+                            Text("Selecciona la duración de la membresía")
+                                .font(.subheadline)
+                                .foregroundColor(.brandLight.opacity(0.7))
+                                .multilineTextAlignment(.center)
+                        }
+                        
+                        // Información de la membresía
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Información de la Membresía")
+                                .font(.headline)
+                                .foregroundColor(.brandGold)
+                            
+                            VStack(spacing: 8) {
+                                HStack {
+                                    Text("Usuario:")
+                                        .foregroundColor(.brandLight.opacity(0.7))
+                                    Spacer()
+                                    Text(membership.email)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.brandLight)
+                                }
+                                
+                                HStack {
+                                    Text("Tipo:")
+                                        .foregroundColor(.brandLight.opacity(0.7))
+                                    Spacer()
+                                    Text(membership.tipoMembresia)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.brandGold)
+                                }
+                                
+                                HStack {
+                                    Text("Precio:")
+                                        .foregroundColor(.brandLight.opacity(0.7))
+                                    Spacer()
+                                    Text("$\(Int(membership.precio).formatted())")
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.green)
+                                }
+                            }
+                            .padding(16)
+                            .background(Color.brandDark.opacity(0.5))
+                            .cornerRadius(12)
+                        }
+                        
+                        // Selección de días predefinidos
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Duración de la Membresía")
+                                .font(.headline)
+                                .foregroundColor(.brandGold)
+                            
+                            Text("Opciones rápidas:")
+                                .font(.subheadline)
+                                .foregroundColor(.brandLight.opacity(0.8))
+                            
+                            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
+                                ForEach(dayOptions, id: \.self) { days in
+                                    DayOptionCard(
+                                        days: days,
+                                        isSelected: selectedDays == days,
+                                        action: {
+                                            selectedDays = days
+                                            customDays = "\(days)"
+                                        }
+                                    )
+                                }
+                            }
+                            
+                            // Campo personalizado
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("O ingresa días personalizados:")
+                                    .font(.subheadline)
+                                    .foregroundColor(.brandLight.opacity(0.8))
+                                
+                                TextField("Número de días", text: $customDays)
+                                    .keyboardType(.numberPad)
+                                    .padding(12)
+                                    .background(Color.brandDark)
+                                    .foregroundColor(.brandWhite)
+                                    .cornerRadius(8)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
+                                    )
+                                    .onChange(of: customDays) { newValue in
+                                        if let days = Int(newValue), days > 0 {
+                                            selectedDays = days
+                                        }
+                                    }
+                            }
+                        }
+                        
+                        // Previsualización de fechas
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Previsualización")
+                                .font(.headline)
+                                .foregroundColor(.brandGold)
+                            
+                            VStack(spacing: 12) {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text("Fecha de Inicio")
+                                            .font(.caption)
+                                            .foregroundColor(.brandLight.opacity(0.7))
+                                        Text(DateFormatter.membershipFormatter.string(from: Date()))
+                                            .font(.subheadline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.brandLight)
+                                    }
+                                    
+                                    Spacer()
+                                    
+                                    VStack(alignment: .trailing, spacing: 4) {
+                                        Text("Fecha de Vencimiento")
+                                            .font(.caption)
+                                            .foregroundColor(.brandLight.opacity(0.7))
+                                        Text(DateFormatter.membershipFormatter.string(from: calculatedEndDate))
+                                            .font(.subheadline)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.brandLight)
+                                    }
+                                }
+                                
+                                // Duración total
+                                HStack {
+                                    Image(systemName: "calendar")
+                                        .foregroundColor(.brandGold)
+                                    Text("Duración: \(selectedDays) días")
+                                        .font(.subheadline)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.brandGold)
+                                    Spacer()
+                                }
+                                
+                                // Barra de tiempo visual
+                                VStack(spacing: 8) {
+                                    HStack {
+                                        Text("Línea de tiempo")
+                                            .font(.caption)
+                                            .foregroundColor(.brandLight.opacity(0.7))
+                                        Spacer()
+                                        Text(getDurationDescription(days: selectedDays))
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .foregroundColor(.brandGold)
+                                    }
+                                    
+                                    ProgressView(value: 0.0, total: 1.0)
+                                        .progressViewStyle(LinearProgressViewStyle(tint: .brandGold))
+                                        .background(Color.brandLight.opacity(0.2))
+                                        .cornerRadius(4)
+                                }
+                            }
+                            .padding(16)
+                            .background(Color.brandDark.opacity(0.3))
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+                            )
+                        }
+                        
+                        // Botón de activación
+                        Button(action: {
+                            showingConfirmation = true
+                        }) {
+                            HStack {
+                                if isActivating {
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .brandBlack))
+                                        .scaleEffect(0.8)
+                                } else {
+                                    Image(systemName: "checkmark.circle.fill")
+                                }
+                                
+                                Text(isActivating ? "Activando..." : "Activar Membresía")
+                                    .fontWeight(.semibold)
+                            }
+                            .foregroundColor(.brandBlack)
+                            .padding(.vertical, 16)
+                            .frame(maxWidth: .infinity)
+                            .background(
+                                LinearGradient(
+                                    colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                            .cornerRadius(12)
+                            .disabled(isActivating || selectedDays <= 0)
+                        }
+                        .scaleEffect(isActivating ? 0.98 : 1.0)
+                        .animation(.spring(response: 0.3), value: isActivating)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                }
+            }
+            .navigationTitle("Activar Membresía")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") {
+                        dismiss()
+                    }
+                    .foregroundColor(.brandLight)
+                    .disabled(isActivating)
+                }
+            }
+            .alert("Confirmar Activación", isPresented: $showingConfirmation) {
+                Button("Activar", role: .cancel) {
+                    Task {
+                        await activateMembership()
+                    }
+                }
+                Button("Cancelar", role: .destructive) { }
+            } message: {
+                Text("¿Activar membresía por \(selectedDays) días?\n\nInicio: \(DateFormatter.membershipFormatter.string(from: Date()))\nVencimiento: \(DateFormatter.membershipFormatter.string(from: calculatedEndDate))")
+            }
+            .preferredColorScheme(.dark)
+        }
+    }
+    
+    private func getDurationDescription(days: Int) -> String {
+        switch days {
+        case 1..<7: return "Corto plazo"
+        case 7..<30: return "Semanal"
+        case 30..<60: return "Mensual"
+        case 60..<180: return "Trimestral"
+        case 180..<365: return "Semestral"
+        case 365...: return "Anual"
+        default: return "Personalizado"
+        }
+    }
+    
+    private func activateMembership() async {
+        isActivating = true
+        
+        await manager.activateMembershipWithCustomDays(
+            membershipId: membership.id,
+            userEmail: membership.email,
+            days: selectedDays
+        )
+        
+        // Delay para mejor UX
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        
+        isActivating = false
+        dismiss()
+    }
+}
+
+struct DayOptionCard: View {
+    let days: Int
+    let isSelected: Bool
+    let action: () -> Void
+    
+    private var displayText: String {
+        switch days {
+        case 7: return "1 Semana"
+        case 15: return "15 Días"
+        case 30: return "1 Mes"
+        case 60: return "2 Meses"
+        case 90: return "3 Meses"
+        case 180: return "6 Meses"
+        case 365: return "1 Año"
+        default: return "\(days) días"
+        }
+    }
+    
+    private var subtitle: String {
+        "\(days) días"
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                Text(displayText)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(isSelected ? .brandBlack : .brandLight)
+                
+                Text(subtitle)
+                    .font(.caption2)
+                    .foregroundColor(isSelected ? .brandBlack.opacity(0.7) : .brandLight.opacity(0.6))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .background(
+                isSelected ?
+                LinearGradient(
+                    colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ) :
+                LinearGradient(
+                    colors: [Color.brandDark, Color.brandDark.opacity(0.8)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(
+                        isSelected ? Color.brandGold : Color.brandGold.opacity(0.3),
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            )
+            .scaleEffect(isSelected ? 1.05 : 1.0)
+            .animation(.spring(response: 0.3), value: isSelected)
+        }
+    }
+}
+
 // MARK: - UserMembershipCard con listener en tiempo real
 
 struct UserMembershipCard: View {
@@ -2221,42 +2912,225 @@ struct UserMembershipCard: View {
     @State private var membershipListener: ListenerRegistration?
     @State private var showingPaymentAlert = false
     
-    
     private var isPaymentDue: Bool {
-            guard let membership = userMembership,
-                  let days = membership.diasRestantes else { return false }
-            return days <= 1 && membership.activa
-        }
+        guard let membership = userMembership,
+              let days = membership.diasRestantes else { return false }
+        return days <= 1 && membership.activa
+    }
     
     private let db = Firestore.firestore()
+    
+    @ViewBuilder
+       private func enhancedActiveMembershipView(membership: MembershipData) -> some View {
+           VStack(spacing: 12) {
+               // Información de duración y activación
+               if let duracion = membership.duracionDias,
+                  let fechaActivacion = membership.fechaActivacion {
+                   
+                   HStack {
+                       VStack(alignment: .leading, spacing: 4) {
+                           Text("Duración Original")
+                               .font(.caption)
+                               .foregroundColor(.brandLight.opacity(0.7))
+                           Text(membership.durationText)
+                               .font(.subheadline)
+                               .fontWeight(.semibold)
+                               .foregroundColor(.brandGold)
+                       }
+                       
+                       Spacer()
+                       
+                       VStack(alignment: .trailing, spacing: 4) {
+                           Text("Activada el")
+                               .font(.caption)
+                               .foregroundColor(.brandLight.opacity(0.7))
+                           Text(DateFormatter.membershipFormatter.string(from: fechaActivacion))
+                               .font(.subheadline)
+                               .fontWeight(.semibold)
+                               .foregroundColor(.brandLight)
+                       }
+                   }
+                   .padding(12)
+                   .background(Color.brandGold.opacity(0.1))
+                   .cornerRadius(8)
+               }
+               
+               // Fechas
+               HStack {
+                   VStack(alignment: .leading, spacing: 4) {
+                       Text("Fecha de Inicio")
+                           .font(.caption)
+                           .foregroundColor(.brandLight.opacity(0.7))
+                       Text(membership.fechaInicio)
+                           .font(.subheadline)
+                           .fontWeight(.semibold)
+                           .foregroundColor(.brandLight)
+                   }
+                   
+                   Spacer()
+                   
+                   VStack(alignment: .trailing, spacing: 4) {
+                       Text("Vencimiento")
+                           .font(.caption)
+                           .foregroundColor(.brandLight.opacity(0.7))
+                       Text(membership.fechaVencimiento)
+                           .font(.subheadline)
+                           .fontWeight(.semibold)
+                           .foregroundColor(.brandLight)
+                   }
+               }
+               
+               // Precio y días restantes
+               HStack {
+                   VStack(alignment: .leading, spacing: 4) {
+                       Text("Precio Mensual")
+                           .font(.caption)
+                           .foregroundColor(.brandLight.opacity(0.7))
+                       Text("$\(Int(membership.precio).formatted())")
+                           .font(.title3)
+                           .fontWeight(.bold)
+                           .foregroundColor(.brandGold)
+                   }
+                   
+                   Spacer()
+                   
+                   if let diasRestantes = membership.diasRestantes {
+                       VStack(alignment: .trailing, spacing: 4) {
+                           Text("Días Restantes")
+                               .font(.caption)
+                               .foregroundColor(.brandLight.opacity(0.7))
+                           
+                           HStack(spacing: 4) {
+                               if membership.isExpiringSoon {
+                                   Image(systemName: "exclamationmark.triangle.fill")
+                                       .foregroundColor(.orange)
+                                       .font(.caption)
+                               } else if membership.isExpiredToday {
+                                   Image(systemName: "xmark.circle.fill")
+                                       .foregroundColor(.red)
+                                       .font(.caption)
+                               }
+                               
+                               Text("\(max(0, diasRestantes))")
+                                   .font(.title3)
+                                   .fontWeight(.bold)
+                                   .foregroundColor(
+                                       diasRestantes <= 0 ? .red :
+                                       diasRestantes <= 3 ? .orange :
+                                       diasRestantes <= 7 ? .yellow : .brandGold
+                                   )
+                           }
+                       }
+                   }
+               }
+               
+               // Barra de progreso mejorada
+               if let diasRestantes = membership.diasRestantes,
+                  let duracionOriginal = membership.duracionDias {
+                   
+                   let diasTranscurridos = duracionOriginal - diasRestantes
+                   let progreso = max(0, min(1, Double(diasTranscurridos) / Double(duracionOriginal)))
+                   
+                   VStack(spacing: 8) {
+                       HStack {
+                           Text("Progreso de Membresía")
+                               .font(.caption)
+                               .foregroundColor(.brandLight.opacity(0.7))
+                           Spacer()
+                           Text("\(Int(progreso * 100))% completado")
+                               .font(.caption)
+                               .fontWeight(.semibold)
+                               .foregroundColor(.brandGold)
+                       }
+                       
+                       ProgressView(value: progreso)
+                           .progressViewStyle(LinearProgressViewStyle(
+                               tint: diasRestantes <= 7 ? .orange : .brandGold
+                           ))
+                           .background(Color.brandLight.opacity(0.2))
+                           .cornerRadius(4)
+                       
+                       HStack {
+                           Text("Día \(diasTranscurridos) de \(duracionOriginal)")
+                               .font(.caption2)
+                               .foregroundColor(.brandLight.opacity(0.6))
+                           Spacer()
+                           if diasRestantes > 0 {
+                               Text("\(diasRestantes) días restantes")
+                                   .font(.caption2)
+                                   .foregroundColor(.brandLight.opacity(0.6))
+                           } else {
+                               Text("Expirada")
+                                   .font(.caption2)
+                                   .foregroundColor(.red)
+                           }
+                       }
+                   }
+               }
+               
+               // Botones de acción
+               if let diasRestantes = membership.diasRestantes {
+                   if diasRestantes <= 0 {
+                       // Membresía expirada
+                       Button(action: { makePhoneCall() }) {
+                           HStack {
+                               Image(systemName: "arrow.clockwise")
+                               Text("Renovar Membresía")
+                                   .fontWeight(.semibold)
+                           }
+                           .foregroundColor(.brandWhite)
+                           .padding(.vertical, 12)
+                           .frame(maxWidth: .infinity)
+                           .background(Color.red.opacity(0.8))
+                           .cornerRadius(8)
+                       }
+                   } else if diasRestantes <= 15 {
+                       // Por vencer pronto
+                       Button(action: { makePhoneCall() }) {
+                           HStack {
+                               Image(systemName: "phone.fill")
+                               Text("Contactar para Renovar")
+                                   .fontWeight(.semibold)
+                           }
+                           .foregroundColor(.brandBlack)
+                           .padding(.vertical, 10)
+                           .frame(maxWidth: .infinity)
+                           .background(Color.orange.opacity(0.8))
+                           .cornerRadius(8)
+                       }
+                   }
+               }
+           }
+       }
     
     var body: some View {
         VStack(spacing: 16) {
             if isPaymentDue {
-                            HStack {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundColor(.orange)
-                                
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("¡Pago Pendiente!")
-                                        .font(.subheadline)
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.orange)
-                                    
-                                    Text("Tu membresía vence pronto. Renueva para continuar.")
-                                        .font(.caption)
-                                        .foregroundColor(.brandLight.opacity(0.8))
-                                }
-                            }
-                            .padding(12)
-                            .background(Color.orange.opacity(0.1))
-                            .cornerRadius(12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                            )
-                            .animation(.spring(response: 0.5), value: isPaymentDue)
-                        }
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("¡Pago Pendiente!")
+                            .font(.subheadline)
+                            .fontWeight(.bold)
+                            .foregroundColor(.orange)
+                        
+                        Text("Tu membresía vence pronto. Renueva para continuar.")
+                            .font(.caption)
+                            .foregroundColor(.brandLight.opacity(0.8))
+                    }
+                }
+                .padding(12)
+                .background(Color.orange.opacity(0.1))
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+                )
+                .animation(.spring(response: 0.5), value: isPaymentDue)
+            }
+            
             // Header
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
@@ -2288,7 +3162,7 @@ struct UserMembershipCard: View {
                             .font(.caption2)
                             .foregroundColor(.brandLight.opacity(0.7))
                         
-                        // ✅ Animación para cambios de estado
+                        // ✅ CORREGIDO: Animación para cambios de estado
                         Text(membership.estadoDescripcion)
                             .font(.caption)
                             .fontWeight(.semibold)
@@ -2304,6 +3178,7 @@ struct UserMembershipCard: View {
                             )
                             .cornerRadius(8)
                             .animation(.spring(response: 0.5), value: membership.activa)
+                            .animation(.spring(response: 0.5), value: membership.estadoDescripcion)
                     }
                 }
             }
@@ -2354,15 +3229,13 @@ struct UserMembershipCard: View {
             membershipListener?.remove()
         }
         .animation(.spring(response: 0.6, dampingFraction: 0.8), value: userMembership?.activa)
+        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: userMembership?.estadoDescripcion)
     }
     
     private func makePhoneCall() {
         let phoneNumber = "3022973150"
         
-        // ✅ Crear URL de teléfono
         if let phoneURL = URL(string: "tel://\(phoneNumber)") {
-            
-            // ✅ Verificar si el dispositivo puede hacer llamadas
             if UIApplication.shared.canOpenURL(phoneURL) {
                 UIApplication.shared.open(phoneURL, options: [:]) { success in
                     if success {
@@ -2379,7 +3252,6 @@ struct UserMembershipCard: View {
         }
     }
 
-    
     // MARK: - Vista para membresía activa
     @ViewBuilder
     private func activeMembershipView(membership: MembershipData) -> some View {
@@ -2475,7 +3347,6 @@ struct UserMembershipCard: View {
             // Botón de renovación si está por vencer
             if let diasRestantes = membership.diasRestantes, diasRestantes <= 15 {
                 Button(action: {
-                    // ✅ Función para abrir la app de teléfono
                     makePhoneCall()
                 }) {
                     HStack {
@@ -2491,7 +3362,7 @@ struct UserMembershipCard: View {
                 }
             }
             
-            // ✅ Mensaje de celebración para membresía recién activada
+            // Mensaje de celebración para membresía recién activada
             if membership.requiereActivacion == false {
                 HStack {
                     Image(systemName: "checkmark.circle.fill")
@@ -2542,7 +3413,7 @@ struct UserMembershipCard: View {
                     .multilineTextAlignment(.center)
                 
                 Button(action: {
-                    print("Contactar gimnasio")
+                    makePhoneCall()
                 }) {
                     HStack {
                         Image(systemName: "phone.fill")
@@ -2574,7 +3445,7 @@ struct UserMembershipCard: View {
                 .multilineTextAlignment(.center)
             
             Button(action: {
-                print("Solicitar membresía")
+                makePhoneCall()
             }) {
                 HStack {
                     Image(systemName: "plus.circle.fill")
@@ -2597,7 +3468,7 @@ struct UserMembershipCard: View {
         .padding(.vertical, 8)
     }
     
-    // MARK: - ✅ FUNCIÓN PRINCIPAL: Listener en tiempo real
+    // MARK: - ✅ FUNCIÓN PRINCIPAL CORREGIDA: Listener en tiempo real
     private func setupRealtimeMembershipListener() {
         Task {
             let userData = await MainActor.run { authManager.currentUserData }
@@ -2608,6 +3479,8 @@ struct UserMembershipCard: View {
                 }
                 return
             }
+            
+            print("🔄 Configurando listener para userUID: \(userData.uid)")
             
             // ✅ Configurar listener en tiempo real
             await MainActor.run {
@@ -2624,25 +3497,42 @@ struct UserMembershipCard: View {
                             return
                         }
                         
-                        // ✅ Actualizar UI cuando cambian los datos
+                        print("📥 Snapshot recibido con \(snapshot.documents.count) documentos")
+                        
+                        // ✅ CORREGIDO: Actualizar UI cuando cambian los datos
                         DispatchQueue.main.async {
                             if let doc = snapshot.documents.first {
+                                // ✅ USAR QueryDocumentSnapshot en lugar de DocumentSnapshot
+                                let previousMembership = userMembership
                                 let newMembership = MembershipData(from: doc)
                                 
+                                print("📋 Datos de membresía recibidos:")
+                                print("- Estado activa: \(newMembership.activa)")
+                                print("- Estado descripción: \(newMembership.estadoDescripcion)")
+                                print("- Tipo: \(newMembership.tipoMembresia)")
+                                
                                 // ✅ Detectar cambio de estado para animaciones
-                                let wasInactive = userMembership?.activa == false
+                                let wasInactive = previousMembership?.activa == false
                                 let isNowActive = newMembership.activa == true
                                 
-                                userMembership = newMembership
+                                // ✅ ACTUALIZAR CON ANIMACIÓN
+                                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                                    userMembership = newMembership
+                                }
                                 
                                 // ✅ Mostrar celebración si se activó
                                 if wasInactive && isNowActive {
                                     showActivationCelebration()
                                 }
                                 
-                                print("✅ Membresía actualizada en tiempo real: \(newMembership.estadoDescripcion)")
+                                print("✅ Membresía actualizada en tiempo real:")
+                                print("- Estado: \(newMembership.estadoDescripcion)")
+                                print("- Activa: \(newMembership.activa)")
+                                
                             } else {
-                                userMembership = nil
+                                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                                    userMembership = nil
+                                }
                                 print("⚠️ No se encontró membresía para el usuario")
                             }
                             
@@ -2653,46 +3543,8 @@ struct UserMembershipCard: View {
         }
     }
     
-    // MARK: - Función para refrescar manualmente
-    private func refreshMembership() {
-        Task {
-            let userData = await MainActor.run { authManager.currentUserData }
-            
-            guard let userData = userData else { return }
-            
-            await MainActor.run {
-                isLoading = true
-            }
-            
-            do {
-                let snapshot = try await db.collection("membresias")
-                    .whereField("userUID", isEqualTo: userData.uid)
-                    .getDocuments()
-                
-                await MainActor.run {
-                    if let doc = snapshot.documents.first {
-                        userMembership = MembershipData(from: doc)
-                        print("✅ Membresía refrescada manualmente")
-                    }
-                    isLoading = false
-                }
-                
-            } catch {
-                print("❌ Error refrescando membresía: \(error.localizedDescription)")
-                await MainActor.run {
-                    isLoading = false
-                }
-            }
-        }
-    }
-    
     // MARK: - Celebración de activación
     private func showActivationCelebration() {
-        // Aquí podrías agregar efectos adicionales como:
-        // - Haptic feedback
-        // - Sonidos
-        // - Animaciones especiales
-        
         DispatchQueue.main.async {
             let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
             impactFeedback.impactOccurred()
@@ -2710,6 +3562,12 @@ struct AdminDashboard: View {
     @StateObject private var miembroManager = MiembroManager()
     @State private var showingMiembros = false
     @State private var showingProfileSheet = false
+    
+    private func initializeMembershipTracking() {
+            MembershipDayTracker.shared.startDailyUpdates()
+            
+            print("✅ Sistema de tracking de membresías inicializado")
+        }
     
     var body: some View {
         let isIPad = UIDevice.current.userInterfaceIdiom == .pad
@@ -2751,9 +3609,6 @@ struct AdminDashboard: View {
                         
                         // ✅ NUEVO: Panel de recordatorios de pago
                         PaymentReminderDashboard()
-                        
-                        // Gestión de usuarios
-                        AdminUsersListCard()
                         
                         // Chat IA
                         IAChatCard()
@@ -2802,9 +3657,6 @@ struct AdminDashboard: View {
                     
                     // ✅ NUEVO: Panel de recordatorios de pago
                     PaymentReminderDashboard()
-                    
-                    // Gestión de usuarios
-                    AdminUsersListCard()
                     
                     // Chat IA
                     IAChatCard()

@@ -25,7 +25,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         FirebaseApp.configure()
         print("✅ Firebase configurado exitosamente")
         
-        PaymentReminderManager.initializeOnAppStart()
+        setupAuthListener()
+        
+        //PaymentReminderManager.initializeOnAppStart()
         
         // Setup auth listener
         setupAuthListener()
@@ -347,15 +349,26 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     
     // MARK: - Auth Management
     private func setupAuthListener() {
-        Auth.auth().addStateDidChangeListener { auth, user in
-            if let user = user {
-                print("👤 Usuario autenticado: \(user.uid)")
-                self.moveTokenToUserCollection(userId: user.uid)
-            } else {
-                print("👤 Usuario no autenticado")
+            Auth.auth().addStateDidChangeListener { auth, user in
+                if let user = user {
+                    print("👤 Usuario autenticado: \(user.uid)")
+                    self.moveTokenToUserCollection(userId: user.uid)
+                    
+                    // AGREGADO: Inicializar recordatorios SOLO para el usuario autenticado
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                        print("🔔 Inicializando recordatorios para usuario: \(user.uid)")
+                        PaymentReminderManager.initializeForUser(userId: user.uid)
+                    }
+                    
+                } else {
+                    print("👤 Usuario no autenticado")
+                    
+                    // AGREGADO: Limpiar recordatorios cuando no hay usuario autenticado
+                    print("🔕 Limpiando recordatorios - usuario no autenticado")
+                    PaymentReminderManager.cancelAllReminders()
+                }
             }
         }
-    }
     
     private func moveTokenToUserCollection(userId: String) {
         guard let fcmToken = UserDefaults.standard.string(forKey: "FCMToken") else {

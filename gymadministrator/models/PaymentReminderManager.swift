@@ -29,6 +29,121 @@ class PaymentReminderManager: NSObject, ObservableObject {
         requestNotificationPermissions()
     }
     
+    static func cancelAllReminders() {
+            print("🔕 Cancelando todos los recordatorios existentes")
+            
+            UNUserNotificationCenter.current().getPendingNotificationRequests { requests in
+                let reminderIds = requests
+                    .filter { $0.identifier.hasPrefix("payment_reminder_") }
+                    .map { $0.identifier }
+                
+                if !reminderIds.isEmpty {
+                    UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: reminderIds)
+                    print("🗑️ Cancelados \(reminderIds.count) recordatorios pendientes")
+                } else {
+                    print("ℹ️ No hay recordatorios pendientes para cancelar")
+                }
+            }
+        }
+    
+    private static func formatDate(_ date: Date) -> String {
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "es_ES")
+            formatter.dateStyle = .short
+            formatter.timeStyle = .none
+            return formatter.string(from: date)
+        }
+    
+    private static func schedulePaymentReminder(subscriptionId: String, studentName: String, endDate: Date, userId: String) {
+            
+            // Calcular fecha de recordatorio (1 día antes)
+            let reminderDate = Calendar.current.date(byAdding: .day, value: -1, to: endDate)
+            
+            guard let reminderDate = reminderDate, reminderDate > Date() else {
+                print("⚠️ Fecha de recordatorio inválida para \(studentName)")
+                return
+            }
+            
+            let content = UNMutableNotificationContent()
+            content.title = "⚠️ Vencimiento de Suscripción"
+            content.body = "La suscripción de \(studentName) vence mañana (\(formatDate(endDate)))"
+            content.sound = .default
+            
+            // IMPORTANTE: Agregar userId a los userInfo
+            content.userInfo = [
+                "type": "payment_reminder",
+                "subscriptionId": subscriptionId,
+                "studentName": studentName,
+                "endDate": endDate.timeIntervalSince1970,
+                "userId": userId // Incluir userId para filtrado
+            ]
+            
+            // Crear trigger para la fecha específica
+            let calendar = Calendar.current
+            let dateComponents = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: reminderDate)
+            let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: false)
+            
+            let identifier = "payment_reminder_\(subscriptionId)_\(userId)" // Incluir userId en identifier
+            let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+            
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error = error {
+                    print("❌ Error programando recordatorio para \(studentName): \(error)")
+                } else {
+                    print("✅ Recordatorio programado para \(studentName) el \(formatDate(reminderDate)) (Usuario: \(userId))")
+                }
+            }
+        }
+    
+    static func initializeForUser(userId: String) {
+            print("🔔 Inicializando recordatorios para usuario específico: \(userId)")
+            
+            // Cancelar recordatorios existentes para evitar duplicados
+            cancelAllReminders()
+            
+            let db = Firestore.firestore()
+            
+            // Obtener solo las suscripciones del usuario autenticado que estén activas
+            db.collection("subscriptions")
+                .whereField("userId", isEqualTo: userId)
+                .whereField("status", isEqualTo: "active")
+                .getDocuments { snapshot, error in
+                    
+                    if let error = error {
+                        print("❌ Error obteniendo suscripciones para usuario \(userId): \(error)")
+                        return
+                    }
+                    
+                    guard let documents = snapshot?.documents else {
+                        print("📄 No se encontraron suscripciones para usuario \(userId)")
+                        return
+                    }
+                    
+                    print("📊 Encontradas \(documents.count) suscripciones activas para usuario \(userId)")
+                    
+                    for document in documents {
+                        let data = document.data()
+                        
+                        guard let endDate = (data["endDate"] as? Timestamp)?.dateValue(),
+                              let studentName = data["studentName"] as? String else {
+                            continue
+                        }
+                        
+                        let subscriptionId = document.documentID
+                        
+                        // Programar recordatorio solo si la fecha de vencimiento está en el futuro
+                        if endDate > Date() {
+                            schedulePaymentReminder(
+                                subscriptionId: subscriptionId,
+                                studentName: studentName,
+                                endDate: endDate,
+                                userId: userId // Pasar el userId específico
+                            )
+                        }
+                    }
+                }
+        }
+    
     // MARK: - Configuración inicial
     func startMonitoring() {
         print("🔔 Iniciando monitoreo de pagos...")
@@ -331,48 +446,6 @@ struct PaymentReminderDashboard: View {
                         .padding(.vertical, 4)
                         .background(Color.orange)
                         .cornerRadius(12)
-                }
-            }
-            
-            // Control del sistema
-            HStack {
-                Button(action: {
-                    if reminderManager.isMonitoring {
-                        reminderManager.stopMonitoring()
-                    } else {
-                        reminderManager.startMonitoring()
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: reminderManager.isMonitoring ? "pause.circle.fill" : "play.circle.fill")
-                        Text(reminderManager.isMonitoring ? "Detener" : "Iniciar")
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.brandWhite)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(reminderManager.isMonitoring ? Color.red.opacity(0.8) : Color.green.opacity(0.8))
-                    .cornerRadius(8)
-                }
-                
-                Spacer()
-                
-                // Botón de prueba
-                Button(action: {
-                    Task {
-                        await reminderManager.testPaymentNotification()
-                    }
-                }) {
-                    HStack {
-                        Image(systemName: "bell.badge")
-                        Text("Test")
-                            .fontWeight(.semibold)
-                    }
-                    .foregroundColor(.brandBlack)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(Color.brandGold.opacity(0.8))
-                    .cornerRadius(8)
                 }
             }
             
