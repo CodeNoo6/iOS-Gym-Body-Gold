@@ -951,8 +951,7 @@ struct LoginView: View {
     
     let generos = [
         (1, "Masculino"),
-        (2, "Femenino"),
-        (3, "Otro")
+        (2, "Femenino")
     ]
     
     // ✅ COMPUTED PROPERTY para edad calculada

@@ -25,13 +25,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         FirebaseApp.configure()
         print("✅ Firebase configurado exitosamente")
         
-        setupAuthListener()
-        
-        //PaymentReminderManager.initializeOnAppStart()
-        
-        // Setup auth listener
-        setupAuthListener()
-        
         // Request notification permissions
         if #available(iOS 10.0, *) {
             UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
@@ -72,30 +65,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         // Set the APNS token in Firebase Messaging
         Messaging.messaging().apnsToken = deviceToken
         print("✅ APNS token asignado a Firebase Messaging")
-        
-        // Wait a moment then get FCM token
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            Messaging.messaging().token { fcmToken, error in
-                if let error = error {
-                    print("❌ Error obteniendo FCM token después de APNS: \(error)")
-                } else if let fcmToken = fcmToken {
-                    print("🔥 ✅ FCM Token verificado después de APNS: \(fcmToken)")
-                    self.sendTokenToFirestore(fcmToken: fcmToken)
-                }
-            }
-        }
-    }
-    
-    func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("❌ Error registrando para notificaciones remotas: \(error.localizedDescription)")
-        
-        // Try to get FCM token anyway for development
-        Messaging.messaging().token { fcmToken, error in
-            if let fcmToken = fcmToken {
-                print("⚠️ FCM Token obtenido sin APNS: \(fcmToken)")
-                self.sendTokenToFirestore(fcmToken: fcmToken)
-            }
-        }
     }
     
     // MARK: - Notification Handling
@@ -156,9 +125,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         }
         
         print("🔥 Nuevo FCM Token: \(fcmToken)")
-        
-        // Save to Firestore
-        sendTokenToFirestore(fcmToken: fcmToken)
         
         // Store locally
         UserDefaults.standard.set(fcmToken, forKey: "FCMToken")
@@ -285,119 +251,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             )
             
             print("📤 Notificación enviada al sistema interno: \(title)")
-        }
-    }
-
-    // MARK: - NUEVA FUNCIÓN: Enviar notificación al sistema interno
-    
-    // MARK: - Firestore Token Management
-    private func sendTokenToFirestore(fcmToken: String) {
-        print("📤 Guardando token FCM en Firestore: \(fcmToken)")
-        
-        let db = Firestore.firestore()
-        
-        // Get device information
-        let deviceModel = UIDevice.current.model
-        let systemVersion = UIDevice.current.systemVersion
-        let deviceName = UIDevice.current.name
-        let timestamp = Timestamp()
-        
-        // Create device data
-        let deviceData: [String: Any] = [
-            "fcmToken": fcmToken,
-            "deviceModel": deviceModel,
-            "systemVersion": systemVersion,
-            "deviceName": deviceName,
-            "platform": "iOS",
-            "lastUpdated": timestamp,
-            "isActive": true
-        ]
-        
-        // Save by authenticated user if available
-        if let currentUser = Auth.auth().currentUser {
-            let userId = currentUser.uid
-            
-            let docRef = db.collection("users").document(userId)
-                          .collection("devices").document(fcmToken)
-            
-            docRef.setData(deviceData, merge: true) { error in
-                if let error = error {
-                    print("❌ Error guardando token en Firestore: \(error.localizedDescription)")
-                } else {
-                    print("✅ Token FCM guardado exitosamente para usuario: \(userId)")
-                    // Clean up inactive tokens
-                    self.cleanupInactiveTokens(userId: userId)
-                }
-            }
-            
-        } else {
-            // Save in general collection if no user authenticated
-            print("⚠️ Usuario no autenticado, guardando token en colección general")
-            
-            let docRef = db.collection("device_tokens").document(fcmToken)
-            
-            docRef.setData(deviceData, merge: true) { error in
-                if let error = error {
-                    print("❌ Error guardando token en colección general: \(error.localizedDescription)")
-                } else {
-                    print("✅ Token FCM guardado exitosamente en colección general")
-                    UserDefaults.standard.set(fcmToken, forKey: "PendingFCMToken")
-                }
-            }
-        }
-    }
-    
-    // MARK: - Auth Management
-    private func setupAuthListener() {
-            Auth.auth().addStateDidChangeListener { auth, user in
-                if let user = user {
-                    print("👤 Usuario autenticado: \(user.uid)")
-                    self.moveTokenToUserCollection(userId: user.uid)
-                    
-                    // AGREGADO: Inicializar recordatorios SOLO para el usuario autenticado
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-                        print("🔔 Inicializando recordatorios para usuario: \(user.uid)")
-                        PaymentReminderManager.initializeForUser(userId: user.uid)
-                    }
-                    
-                } else {
-                    print("👤 Usuario no autenticado")
-                    
-                    // AGREGADO: Limpiar recordatorios cuando no hay usuario autenticado
-                    print("🔕 Limpiando recordatorios - usuario no autenticado")
-                    PaymentReminderManager.cancelAllReminders()
-                }
-            }
-        }
-    
-    private func moveTokenToUserCollection(userId: String) {
-        guard let fcmToken = UserDefaults.standard.string(forKey: "FCMToken") else {
-            print("⚠️ No hay token FCM para mover")
-            return
-        }
-        
-        let db = Firestore.firestore()
-        
-        // Check if token exists in general collection
-        db.collection("device_tokens").document(fcmToken).getDocument { snapshot, error in
-            guard let data = snapshot?.data() else { return }
-            
-            // Move to user collection
-            let userDeviceRef = db.collection("users").document(userId)
-                                 .collection("devices").document(fcmToken)
-            
-            userDeviceRef.setData(data, merge: true) { error in
-                if error == nil {
-                    print("✅ Token movido exitosamente a colección de usuario")
-                    
-                    // Delete from general collection
-                    db.collection("device_tokens").document(fcmToken).delete()
-                    UserDefaults.standard.removeObject(forKey: "PendingFCMToken")
-                    
-                    // Clean up inactive tokens
-                    self.cleanupInactiveTokens(userId: userId)
-                }
-            }
         }
     }
     
