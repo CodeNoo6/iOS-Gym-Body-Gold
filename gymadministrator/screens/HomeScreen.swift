@@ -2181,7 +2181,7 @@ struct AdminMembershipRowWithCustomDays: View {
     @State private var isToggling = false
     @State private var showingActivationSheet = false
     
-    // Computed properties para mejor legibilidad
+    // MARK: - Computed UI Helpers
     private var statusColor: Color {
         membership.activa ? .green : .orange
     }
@@ -2192,10 +2192,10 @@ struct AdminMembershipRowWithCustomDays: View {
     
     private var backgroundGradient: LinearGradient {
         LinearGradient(
-            gradient: Gradient(colors: [
-                Color.brandBlack.opacity(0.4),
-                Color.brandBlack.opacity(0.2)
-            ]),
+            colors: [
+                Color.brandBlack.opacity(0.5),
+                Color.brandBlack.opacity(0.25)
+            ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
@@ -2203,48 +2203,36 @@ struct AdminMembershipRowWithCustomDays: View {
     
     var body: some View {
         HStack(spacing: 16) {
-            // Avatar y estado mejorado
+            // Avatar
             membershipAvatar
             
-            // Información principal
+            // Información
             membershipInfo
             
-            Spacer()
+            Spacer(minLength: 12)
             
-            // Panel de controles
+            // Controles
             controlPanel
         }
         .padding(16)
         .background(backgroundGradient)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                .stroke(
-                    LinearGradient(
-                        gradient: Gradient(colors: [
-                            statusColor.opacity(0.4),
-                            statusColor.opacity(0.1)
-                        ]),
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1.5
-                )
+                .stroke(statusColor.opacity(0.3), lineWidth: 1)
         )
         .cornerRadius(16)
         .shadow(
-            color: membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2),
-            radius: 8,
-            x: 0,
-            y: 4
+            color: statusColor.opacity(0.15),
+            radius: 8, x: 0, y: 4
         )
-        .scaleEffect(isToggling ? 0.97 : 1.0)
+        .scaleEffect(isToggling ? 0.97 : 1)
         .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isToggling)
         .sheet(isPresented: $showingActivationSheet) {
             MembershipActivationSheet(membership: membership, manager: manager)
         }
     }
     
-    // MARK: - Avatar y Estado
+    // MARK: - Avatar
     private var membershipAvatar: some View {
         ZStack {
             Image(systemName: membership.activa ? "creditcard.fill" : "creditcard.trianglebadge.exclamationmark")
@@ -2253,84 +2241,67 @@ struct AdminMembershipRowWithCustomDays: View {
         }
     }
     
-    // MARK: - Información de la Membresía
+    // MARK: - Información
     private var membershipInfo: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // Email con mejor tipografía
             Text(membership.email)
                 .font(.system(.subheadline, design: .rounded))
                 .fontWeight(.semibold)
                 .foregroundColor(.brandLight)
                 .lineLimit(1)
             
-            // Tipo de membresía destacado
-            HStack(spacing: 6) {
-                Text(membership.tipoMembresia)
-                    .font(.system(.caption, design: .rounded))
-                    .fontWeight(.medium)
-                    .foregroundColor(.brandGold)
-            }
+            Text(membership.tipoMembresia)
+                .font(.system(.caption, design: .rounded))
+                .fontWeight(.medium)
+                .foregroundColor(.brandGold)
             
-            // Estado con diseño pill mejorado
             statusPill
-            
-            // Información de días
             daysInfo
         }
     }
     
     private var statusPill: some View {
-        Text(membership.estadoDescripcion)
-            .font(.system(.caption2, design: .rounded))
-            .fontWeight(.semibold)
-            .foregroundColor(membership.activa ? .white : .brandBlack)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(
-                Capsule()
-                    .fill(membership.activa ? statusColor : statusColor.opacity(0.3))
-            )
-            .overlay(
-                Capsule()
-                    .stroke(statusColor.opacity(0.5), lineWidth: 0.5)
-            )
+        HStack(spacing: 4) {
+            Image(systemName: statusIcon)
+                .font(.system(size: 10, weight: .bold))
+            Text(membership.estadoDescripcion)
+        }
+        .font(.system(.caption2, design: .rounded))
+        .fontWeight(.semibold)
+        .foregroundColor(membership.activa ? .white : .brandBlack)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(
+            Capsule().fill(membership.activa ? statusColor : statusColor.opacity(0.3))
+        )
     }
     
     private var daysInfo: some View {
         HStack(spacing: 8) {
             if membership.activa, let dias = membership.diasRestantes {
-                Label {
-                    Text("\(dias) días restantes")
-                        .font(.system(.caption2, design: .monospaced))
-                        .fontWeight(.medium)
-                } icon: {
-                    Image(systemName: "clock")
-                        .font(.caption2)
-                }
-                .foregroundColor(.brandLight.opacity(0.8))
+                infoLabel(icon: "clock", text: "\(dias) días restantes", color: .brandLight.opacity(0.8))
             }
-            
             if let duracion = membership.duracionDias {
-                Label {
-                    Text("\(duracion)d total")
-                        .font(.system(.caption2, design: .monospaced))
-                        .fontWeight(.medium)
-                } icon: {
-                    Image(systemName: "calendar")
-                        .font(.caption2)
-                }
-                .foregroundColor(.brandGold.opacity(0.7))
+                infoLabel(icon: "calendar", text: "\(duracion)d total", color: .brandGold.opacity(0.7))
             }
         }
     }
     
-    // MARK: - Panel de Controles
+    private func infoLabel(icon: String, text: String, color: Color) -> some View {
+        Label {
+            Text(text)
+                .font(.system(.caption2, design: .monospaced))
+                .fontWeight(.medium)
+        } icon: {
+            Image(systemName: icon).font(.caption2)
+        }
+        .foregroundColor(color)
+    }
+    
+    // MARK: - Controles
     private var controlPanel: some View {
         VStack(spacing: 12) {
-            // Precio destacado
             priceDisplay
-            
-            // Botón de acción principal
             actionButton
         }
     }
@@ -2339,19 +2310,14 @@ struct AdminMembershipRowWithCustomDays: View {
         VStack(spacing: 2) {
             Text("PRECIO")
                 .font(.system(.caption2, design: .rounded))
-                .fontWeight(.medium)
                 .foregroundColor(.brandGold.opacity(0.6))
-            
             Text("$\(Int(membership.precio).formatted())")
                 .font(.system(.headline, design: .rounded))
                 .fontWeight(.bold)
                 .foregroundColor(.brandGold)
         }
         .padding(8)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.brandGold.opacity(0.1))
-        )
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.brandGold.opacity(0.1)))
     }
     
     private var actionButton: some View {
@@ -2365,21 +2331,44 @@ struct AdminMembershipRowWithCustomDays: View {
     }
     
     private var suspendButton: some View {
-        Button(action: {
-            Task {
-                await suspendMembership()
-            }
-        }) {
+        actionStyledButton(
+            text: "Suspender",
+            icon: "pause.circle.fill",
+            bgColors: [.red, .red.opacity(0.85)],
+            loading: isToggling
+        ) {
+            Task { await suspendMembership() }
+        }
+    }
+    
+    private var activateButton: some View {
+        actionStyledButton(
+            text: "Activar",
+            icon: "calendar.badge.plus",
+            bgColors: [.green, .green.opacity(0.85)],
+            loading: false
+        ) {
+            showingActivationSheet = true
+        }
+    }
+    
+    private func actionStyledButton(
+        text: String,
+        icon: String,
+        bgColors: [Color],
+        loading: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
             HStack(spacing: 6) {
-                if isToggling {
+                if loading {
                     ProgressView()
                         .progressViewStyle(CircularProgressViewStyle(tint: .white))
                         .scaleEffect(0.8)
                 } else {
-                    Image(systemName: "pause.circle.fill")
+                    Image(systemName: icon)
                         .font(.system(.caption, weight: .semibold))
-                    
-                    Text("Suspender")
+                    Text(text)
                         .font(.system(.caption, design: .rounded))
                         .fontWeight(.semibold)
                 }
@@ -2388,76 +2377,27 @@ struct AdminMembershipRowWithCustomDays: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(
-                LinearGradient(
-                    gradient: Gradient(colors: [Color.red, Color.red.opacity(0.8)]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
+                LinearGradient(colors: bgColors, startPoint: .topLeading, endPoint: .bottomTrailing)
             )
             .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.red.opacity(0.3), lineWidth: 0.5)
-            )
-            .shadow(color: Color.red.opacity(0.3), radius: 4, x: 0, y: 2)
+            .shadow(color: bgColors.first!.opacity(0.3), radius: 4, x: 0, y: 2)
         }
-        .disabled(isToggling)
-        .scaleEffect(isToggling ? 0.95 : 1.0)
-    }
-    
-    private var activateButton: some View {
-        Button(action: {
-            showingActivationSheet = true
-        }) {
-            HStack(spacing: 6) {
-                Image(systemName: "calendar.badge.plus")
-                    .font(.system(.caption, weight: .semibold))
-                
-                Text("Activar")
-                    .font(.system(.caption, design: .rounded))
-                    .fontWeight(.semibold)
-            }
-            .foregroundColor(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(
-                LinearGradient(
-                    gradient: Gradient(colors: [Color.green, Color.green.opacity(0.8)]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .cornerRadius(8)
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.green.opacity(0.3), lineWidth: 0.5)
-            )
-            .shadow(color: Color.green.opacity(0.3), radius: 4, x: 0, y: 2)
-        }
-        .scaleEffect(showingActivationSheet ? 0.95 : 1.0)
-        .animation(.spring(response: 0.3), value: showingActivationSheet)
+        .disabled(loading)
+        .scaleEffect(loading ? 0.95 : 1.0)
     }
     
     // MARK: - Actions
     private func suspendMembership() async {
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-            isToggling = true
-        }
-        
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { isToggling = true }
         await manager.toggleMembershipStatus(
             membershipId: membership.id,
             userEmail: membership.email,
             currentStatus: membership.activa
         )
-        
         try? await Task.sleep(nanoseconds: 500_000_000)
-        
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-            isToggling = false
-        }
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { isToggling = false }
     }
 }
-
 
 // MARK: - Fila individual de membresía para admin
 struct AdminMembershipRow: View {
@@ -3040,24 +2980,6 @@ struct MembershipActivationSheet: View {
                                     Spacer()
                                 }
                                 
-                                // Barra de tiempo visual
-                                VStack(spacing: 8) {
-                                    HStack {
-                                        Text("Línea de tiempo")
-                                            .font(.caption)
-                                            .foregroundColor(.brandLight.opacity(0.7))
-                                        Spacer()
-                                        Text(getDurationDescription(days: selectedDays))
-                                            .font(.caption)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.brandGold)
-                                    }
-                                    
-                                    ProgressView(value: 0.0, total: 1.0)
-                                        .progressViewStyle(LinearProgressViewStyle(tint: .brandGold))
-                                        .background(Color.brandLight.opacity(0.2))
-                                        .cornerRadius(4)
-                                }
                             }
                             .padding(16)
                             .background(Color.brandDark.opacity(0.3))
@@ -3788,76 +3710,57 @@ struct UserMembershipCard: View {
     
     // MARK: - ✅ FUNCIÓN PRINCIPAL CORREGIDA: Listener en tiempo real
     private func setupRealtimeMembershipListener() {
-        Task {
-            let userData = await MainActor.run { authManager.currentUserData }
-            
-            guard let userData = userData else {
-                await MainActor.run {
-                    isLoading = false
-                }
+        Task { @MainActor in
+            guard let userData = authManager.currentUserData else {
+                isLoading = false
                 return
             }
-            
+
             print("🔄 Configurando listener para userUID: \(userData.uid)")
-            
-            // ✅ Configurar listener en tiempo real
-            await MainActor.run {
-                membershipListener = db.collection("membresias")
-                    .whereField("userUID", isEqualTo: userData.uid)
-                    .addSnapshotListener { snapshot, error in
-                        if let error = error {
-                            print("❌ Error en listener de membresía: \(error.localizedDescription)")
-                            return
-                        }
-                        
-                        guard let snapshot = snapshot else {
-                            print("⚠️ Snapshot de membresía vacío")
-                            return
-                        }
-                        
-                        print("📥 Snapshot recibido con \(snapshot.documents.count) documentos")
-                        
-                        // ✅ CORREGIDO: Actualizar UI cuando cambian los datos
-                        DispatchQueue.main.async {
-                            if let doc = snapshot.documents.first {
-                                // ✅ USAR QueryDocumentSnapshot en lugar de DocumentSnapshot
-                                let previousMembership = userMembership
-                                let newMembership = MembershipData(from: doc)
-                                
-                                print("📋 Datos de membresía recibidos:")
-                                print("- Estado activa: \(newMembership.activa)")
-                                print("- Estado descripción: \(newMembership.estadoDescripcion)")
-                                print("- Tipo: \(newMembership.tipoMembresia)")
-                                
-                                // ✅ Detectar cambio de estado para animaciones
-                                let wasInactive = previousMembership?.activa == false
-                                let isNowActive = newMembership.activa == true
-                                
-                                // ✅ ACTUALIZAR CON ANIMACIÓN
-                                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                                    userMembership = newMembership
-                                }
-                                
-                                // ✅ Mostrar celebración si se activó
-                                if wasInactive && isNowActive {
-                                    showActivationCelebration()
-                                }
-                                
-                                print("✅ Membresía actualizada en tiempo real:")
-                                print("- Estado: \(newMembership.estadoDescripcion)")
-                                print("- Activa: \(newMembership.activa)")
-                                
-                            } else {
-                                withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                                    userMembership = nil
-                                }
-                                print("⚠️ No se encontró membresía para el usuario")
-                            }
-                            
-                            isLoading = false
-                        }
+
+            // Ya tenemos userData en MainActor, ahora configuramos el listener
+            membershipListener = db.collection("membresias")
+                .whereField("userUID", isEqualTo: userData.uid)
+                .addSnapshotListener { snapshot, error in
+                    if let error = error {
+                        print("❌ Error en listener de membresía: \(error.localizedDescription)")
+                        return
                     }
-            }
+
+                    guard let snapshot = snapshot else {
+                        print("⚠️ Snapshot de membresía vacío")
+                        return
+                    }
+
+                    print("📥 Snapshot recibido con \(snapshot.documents.count) documentos")
+
+                    DispatchQueue.main.async {
+                        if let doc = snapshot.documents.first {
+                            let previousMembership = self.userMembership
+                            let newMembership = MembershipData(from: doc)
+
+                            let wasInactive = previousMembership?.activa == false
+                            let isNowActive = newMembership.activa == true
+                            
+                            print("📄 Datos Firestore: \(doc.data())")
+                            print("✅ Valor 'activa' en modelo: \(newMembership.activa)")
+
+                            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                                self.userMembership = newMembership
+                            }
+
+                            if wasInactive && isNowActive {
+                                self.showActivationCelebration()
+                            }
+                        } else {
+                            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                                self.userMembership = nil
+                            }
+                        }
+
+                        self.isLoading = false
+                    }
+                }
         }
     }
     
@@ -4139,7 +4042,7 @@ class DashboardManager: ObservableObject {
 
 struct UserProfileView: View {
     @EnvironmentObject var authManager: AuthManager
-    @State private var editableUser: UserData? // Copia para edición
+    @State private var editableUser: UserData?
     @State private var isEditing = false
 
     var body: some View {
@@ -4149,98 +4052,118 @@ struct UserProfileView: View {
 
                 if let userData = editableUser {
                     ScrollView {
-                        VStack(spacing: 20) {
-                            Image(systemName: "person.circle.fill")
-                                .resizable()
-                                .frame(width: 100, height: 100)
-                                .foregroundColor(.brandGold)
+                        VStack(spacing: 25) {
+                            
+                            // Avatar
+                            VStack {
+                                Image(systemName: "person.circle.fill")
+                                    .resizable()
+                                    .frame(width: 120, height: 120)
+                                    .foregroundColor(.brandGold)
+                                    .shadow(color: .brandGold.opacity(0.5), radius: 10)
+                                
+                                Text(userData.displayName)
+                                    .font(.title3.bold())
+                                    .foregroundColor(.brandWhite)
+                                    .padding(.top, 4)
+                            }
+                            .padding(.top)
 
-                            // Campos deshabilitados si no está en edición
-                            CustomTextField(
-                                placeholder: "Nombre",
-                                text: Binding(
-                                    get: { userData.nombre },
-                                    set: { editableUser?.nombre = $0 }
-                                ),
-                                icon: "person.fill"
-                            )
-                            .disabled(!isEditing)
+                            // Sección Información Personal
+                            profileSection(title: "Información Personal") {
+                                CustomTextField(
+                                    placeholder: "Nombre",
+                                    text: Binding(
+                                        get: { userData.nombre },
+                                        set: { editableUser?.nombre = $0 }
+                                    ),
+                                    icon: "person.fill"
+                                )
+                                .disabled(!isEditing)
 
-                            CustomTextField(
-                                placeholder: "Apellido",
-                                text: Binding(
-                                    get: { userData.apellido },
-                                    set: { editableUser?.apellido = $0 }
-                                ),
-                                icon: "person.fill"
-                            )
-                            .disabled(!isEditing)
+                                CustomTextField(
+                                    placeholder: "Apellido",
+                                    text: Binding(
+                                        get: { userData.apellido },
+                                        set: { editableUser?.apellido = $0 }
+                                    ),
+                                    icon: "person.fill"
+                                )
+                                .disabled(!isEditing)
 
-                            CustomTextField(
-                                placeholder: "Nombre de Usuario",
-                                text: Binding(
-                                    get: { userData.displayName },
-                                    set: { editableUser?.displayName = $0 }
-                                ),
-                                icon: "at.circle.fill"
-                            )
-                            .disabled(!isEditing)
+                                CustomTextField(
+                                    placeholder: "Nombre de Usuario",
+                                    text: Binding(
+                                        get: { userData.displayName },
+                                        set: { editableUser?.displayName = $0 }
+                                    ),
+                                    icon: "at.circle.fill"
+                                )
+                                .disabled(!isEditing)
+                            }
 
-                            CustomTextField(
-                                placeholder: "Teléfono",
-                                text: Binding(
-                                    get: { userData.telefono },
-                                    set: { editableUser?.telefono = $0 }
-                                ),
-                                icon: "phone.fill",
-                                keyboardType: .phonePad
-                            )
-                            .disabled(!isEditing)
+                            // Sección Contacto
+                            profileSection(title: "Contacto") {
+                                CustomTextField(
+                                    placeholder: "Teléfono",
+                                    text: Binding(
+                                        get: { userData.telefono },
+                                        set: { editableUser?.telefono = $0 }
+                                    ),
+                                    icon: "phone.fill",
+                                    keyboardType: .phonePad
+                                )
+                                .disabled(!isEditing)
 
-                            CustomTextField(
-                                placeholder: "Dirección",
-                                text: Binding(
-                                    get: { userData.direccion },
-                                    set: { editableUser?.direccion = $0 }
-                                ),
-                                icon: "house.fill"
-                            )
-                            .disabled(!isEditing)
+                                CustomTextField(
+                                    placeholder: "Dirección",
+                                    text: Binding(
+                                        get: { userData.direccion },
+                                        set: { editableUser?.direccion = $0 }
+                                    ),
+                                    icon: "house.fill"
+                                )
+                                .disabled(!isEditing)
+                            }
 
-                            CustomTextField(
-                                placeholder: "Edad",
-                                text: Binding(
-                                    get: { userData.edad ?? "" },
-                                    set: { editableUser?.edad = $0 }
-                                ),
-                                icon: "calendar",
-                                keyboardType: .numberPad
-                            )
-                            .disabled(!isEditing)
+                            // Sección Datos Físicos
+                            profileSection(title: "Datos Físicos") {
+                                CustomTextField(
+                                    placeholder: "Edad",
+                                    text: Binding(
+                                        get: { userData.edad ?? "" },
+                                        set: { editableUser?.edad = $0 }
+                                    ),
+                                    icon: "calendar",
+                                    keyboardType: .numberPad
+                                )
+                                .disabled(!isEditing)
 
-                            CustomTextField(
-                                placeholder: "Peso (kg)",
-                                text: Binding(
-                                    get: { userData.peso ?? "" },
-                                    set: { editableUser?.peso = $0 }
-                                ),
-                                icon: "scalemass",
-                                keyboardType: .decimalPad
-                            )
-                            .disabled(!isEditing)
+                                CustomTextField(
+                                    placeholder: "Peso (kg)",
+                                    text: Binding(
+                                        get: { userData.peso ?? "" },
+                                        set: { editableUser?.peso = $0 }
+                                    ),
+                                    icon: "scalemass",
+                                    keyboardType: .decimalPad
+                                )
+                                .disabled(!isEditing)
 
-                            CustomTextField(
-                                placeholder: "Estatura (cm)",
-                                text: Binding(
-                                    get: { userData.estatura ?? "" },
-                                    set: { editableUser?.estatura = $0 }
-                                ),
-                                icon: "ruler",
-                                keyboardType: .decimalPad
-                            )
-                            .disabled(!isEditing)
+                                CustomTextField(
+                                    placeholder: "Estatura (cm)",
+                                    text: Binding(
+                                        get: { userData.estatura ?? "" },
+                                        set: { editableUser?.estatura = $0 }
+                                    ),
+                                    icon: "ruler",
+                                    keyboardType: .decimalPad
+                                )
+                                .disabled(!isEditing)
+                            }
                         }
-                        .padding()
+                        .padding(.horizontal)
+                        .animation(.easeInOut, value: isEditing)
                     }
                 } else {
                     ProgressView("Cargando perfil...")
@@ -4253,7 +4176,7 @@ struct UserProfileView: View {
                         .font(.headline)
                         .foregroundColor(.brandGold)
                 }
-                
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if isEditing {
                         Button("Guardar") {
@@ -4278,6 +4201,27 @@ struct UserProfileView: View {
                 }
             }
             .preferredColorScheme(.dark)
+        }
+    }
+
+    // MARK: - Subview para secciones
+    @ViewBuilder
+    private func profileSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 15) {
+            Text(title)
+                .font(.headline)
+                .foregroundColor(.brandGold)
+            
+            VStack(spacing: 12) {
+                content()
+            }
+            .padding()
+            .background(Color.brandWhite.opacity(0.05))
+            .cornerRadius(15)
+            .overlay(
+                RoundedRectangle(cornerRadius: 15)
+                    .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+            )
         }
     }
 }

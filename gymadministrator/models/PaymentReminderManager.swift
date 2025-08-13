@@ -104,9 +104,9 @@ class PaymentReminderManager: NSObject, ObservableObject {
             let db = Firestore.firestore()
             
             // Obtener solo las suscripciones del usuario autenticado que estén activas
-            db.collection("subscriptions")
-                .whereField("userId", isEqualTo: userId)
-                .whereField("status", isEqualTo: "active")
+            db.collection("membresias")
+                .whereField("userUID", isEqualTo: userId)
+                .whereField("activa", isEqualTo: "true")
                 .getDocuments { snapshot, error in
                     
                     if let error = error {

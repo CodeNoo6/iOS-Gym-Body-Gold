@@ -130,6 +130,20 @@ struct UserData {
     }
 }
 
+// MARK: - Extensión para calcular edad
+extension Date {
+    func calculateAge() -> Int {
+        let calendar = Calendar.current
+        let now = Date()
+        let ageComponents = calendar.dateComponents([.year], from: self, to: now)
+        return ageComponents.year ?? 0
+    }
+    
+    func calculateAgeString() -> String {
+        return "\(calculateAge())"
+    }
+}
+
 struct CustomDatePicker: View {
     let placeholder: String
     let icon: String
@@ -263,6 +277,51 @@ struct CustomSegmentedPicker<T: Hashable>: View {
     }
 }
 
+// MARK: - Nuevo componente para mostrar edad calculada
+struct CalculatedAgeDisplay: View {
+    let birthDate: Date
+    
+    var calculatedAge: Int {
+        birthDate.calculateAge()
+    }
+    
+    var body: some View {
+        HStack(spacing: 15) {
+            Image(systemName: "calendar.badge.clock")
+                .foregroundColor(.brandGold)
+                .frame(width: 20, height: 20)
+            
+            HStack {
+                Text("Edad Calculada")
+                    .foregroundColor(.brandGold)
+                    .font(.system(size: 16))
+                
+                Spacer()
+                
+                Text("\(calculatedAge) años")
+                    .foregroundColor(.brandLight)
+                    .font(.system(size: 16, weight: .semibold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.brandGold.opacity(0.2))
+                    )
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
+        .background(
+            RoundedRectangle(cornerRadius: 15)
+                .fill(Color.brandSuccess.opacity(0.1))
+                .backdrop(blur: 10)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 15)
+                .stroke(Color.brandSuccess.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
 
 // MARK: - Custom Components for Consistent Design
 @MainActor
@@ -378,7 +437,7 @@ class AuthManager: ObservableObject {
                print("📱 Obteniendo FCM token para el nuevo usuario...")
                let fcmToken = await getFCMTokenForNewUser()
                
-               // 4️⃣ Crear UserData actualizado con FCM token
+               // 4️⃣ Crear UserData actualizado con FCM token y edad calculada
                var userDataWithFCM = UserData(
                    uid: uid,
                    email: userData.email,
@@ -392,7 +451,7 @@ class AuthManager: ObservableObject {
                    direccion: userData.direccion,
                    activo: userData.activo,
                    idGenero: userData.idGenero,
-                   edad: userData.edad,
+                   edad: userData.fechaNacimiento.calculateAgeString(), // ✅ EDAD CALCULADA AUTOMÁTICAMENTE
                    peso: userData.peso,
                    estatura: userData.estatura,
                    fechaCreacion: userData.fechaCreacion,
@@ -403,7 +462,7 @@ class AuthManager: ObservableObject {
                // 5️⃣ Guardar en colección "usuarios"
                let db = Firestore.firestore()
                try await db.collection("usuarios").document(uid).setData(userDataWithFCM.dictionary)
-               print("✅ Usuario guardado en Firestore")
+               print("✅ Usuario guardado en Firestore con edad calculada: \(userDataWithFCM.edad ?? "N/A")")
                
                // 6️⃣ ✨ NUEVO: Crear membresía inactiva automáticamente
                await createDefaultMembership(for: userDataWithFCM, in: db)
@@ -436,7 +495,7 @@ class AuthManager: ObservableObject {
                     "userUID": userData.uid,
                     "email": userData.email,
                     "tipoMembresia": "Básica",
-                    "precio": 80000.0,
+                    "precio": 70000.0,
                     "fechaInicio": "",
                     "fechaVencimiento": "",
                     "activa": false,
@@ -674,7 +733,7 @@ class AuthManager: ObservableObject {
             print("📱 Obteniendo FCM token para el nuevo usuario...")
             let fcmToken = await getFCMTokenForNewUser()
             
-            // 4️⃣ Crear UserData actualizado con FCM token
+            // 4️⃣ Crear UserData actualizado con FCM token y edad calculada
             var userDataWithFCM = UserData(
                 uid: uid,
                 email: userData.email,
@@ -688,7 +747,7 @@ class AuthManager: ObservableObject {
                 direccion: userData.direccion,
                 activo: userData.activo,
                 idGenero: userData.idGenero,
-                edad: userData.edad,
+                edad: userData.fechaNacimiento.calculateAgeString(), // ✅ EDAD CALCULADA AUTOMÁTICAMENTE
                 peso: userData.peso,
                 estatura: userData.estatura,
                 fechaCreacion: userData.fechaCreacion,
@@ -700,7 +759,7 @@ class AuthManager: ObservableObject {
             let db = Firestore.firestore()
             try await db.collection("usuarios").document(uid).setData(userDataWithFCM.dictionary)
 
-            print("✅ Usuario guardado en Firestore con FCM token: \(fcmToken?.prefix(20) ?? "nil")...")
+            print("✅ Usuario guardado en Firestore con FCM token: \(fcmToken?.prefix(20) ?? "nil")... y edad: \(userDataWithFCM.edad ?? "N/A")")
             
             // 6️⃣ Enviar notificación de bienvenida
             if let token = fcmToken {
@@ -876,8 +935,7 @@ struct LoginView: View {
     @State private var activo = true
     @State private var idGenero = 1
     
-    // Campos para registro - Información Física
-    @State private var edad = ""
+    // Campos para registro - Información Física (edad se calculará automáticamente)
     @State private var peso = ""
     @State private var estatura = ""
     
@@ -896,6 +954,96 @@ struct LoginView: View {
         (2, "Femenino"),
         (3, "Otro")
     ]
+    
+    // ✅ COMPUTED PROPERTY para edad calculada
+    private var calculatedAge: Int {
+        fechaNacimiento.calculateAge()
+    }
+    
+    private func isValidEmail(_ email: String) -> Bool {
+        let emailRegEx = "[A-Z0-9a-z._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,64}"
+        let emailPred = NSPredicate(format:"SELF MATCHES %@", emailRegEx)
+        return emailPred.evaluate(with: email)
+    }
+    
+    private func validateRegistrationFields() -> (isValid: Bool, errorMessage: String) {
+        // Validar documento
+        if numeroDocumento.isEmpty {
+            return (false, "❌ El número de documento es requerido")
+        }
+        
+        if numeroDocumento.count < 6 {
+            return (false, "❌ El número de documento debe tener al menos 6 dígitos")
+        }
+        
+        // Validar nombres
+        if nombre.isEmpty {
+            return (false, "❌ El nombre es requerido")
+        }
+        
+        if nombre.count < 2 {
+            return (false, "❌ El nombre debe tener al menos 2 caracteres")
+        }
+        
+        if apellido.isEmpty {
+            return (false, "❌ El apellido es requerido")
+        }
+        
+        if apellido.count < 2 {
+            return (false, "❌ El apellido debe tener al menos 2 caracteres")
+        }
+        
+        // Validar teléfono
+        if telefono.isEmpty {
+            return (false, "❌ El teléfono es requerido")
+        }
+        
+        if telefono.count < 7 {
+            return (false, "❌ El teléfono debe tener al menos 7 dígitos")
+        }
+        
+        // ✅ VALIDACIÓN DE EDAD CALCULADA
+        if calculatedAge < 10 {
+            return (false, "❌ Debes tener al menos 10 años para registrarte")
+        }
+        
+        if calculatedAge > 100 {
+            return (false, "❌ Por favor, verifica tu fecha de nacimiento")
+        }
+        
+        // Validar campos opcionales si están llenos
+        if !peso.isEmpty {
+            if let pesoNum = Double(peso) {
+                if pesoNum < 20 || pesoNum > 300 {
+                    return (false, "❌ El peso debe estar entre 20 y 300 kg")
+                }
+            } else {
+                return (false, "❌ El peso debe ser un número válido")
+            }
+        }
+        
+        if !estatura.isEmpty {
+            if let estaturaNum = Int(estatura) {
+                if estaturaNum < 100 || estaturaNum > 250 {
+                    return (false, "❌ La estatura debe estar entre 100 y 250 cm")
+                }
+            } else {
+                return (false, "❌ La estatura debe ser un número válido")
+            }
+        }
+        
+        // Validar email
+        if !isValidEmail(email) {
+            return (false, "❌ El formato del email no es válido")
+        }
+        
+        // Validar contraseña
+        if password.count < 6 {
+            return (false, "❌ La contraseña debe tener al menos 6 caracteres")
+        }
+        
+        return (true, "")
+    }
     
     var body: some View {
         ZStack {
@@ -985,8 +1133,11 @@ struct LoginView: View {
                                         placeholder: "Número de Documento",
                                         text: $numeroDocumento,
                                         icon: "number.circle.fill",
-                                        keyboardType: .numberPad
+                                        keyboardType: .numberPad,
+                                        inputFilter: .numbersOnly,
+                                        maxLength: 15
                                     )
+
                                 }
                                 .padding(.bottom, 10)
                                 
@@ -1007,13 +1158,19 @@ struct LoginView: View {
                                     CustomTextField(
                                         placeholder: "Nombre",
                                         text: $nombre,
-                                        icon: "person.fill"
+                                        icon: "person.fill",
+                                        keyboardType: .default,
+                                        inputFilter: .lettersAndSpaces,
+                                        maxLength: 30
                                     )
                                     
                                     CustomTextField(
                                         placeholder: "Apellido",
                                         text: $apellido,
-                                        icon: "person.fill"
+                                        icon: "person.fill",
+                                        keyboardType: .default,
+                                        inputFilter: .lettersAndSpaces,
+                                        maxLength: 30
                                     )
                                     
                                     CustomTextField(
@@ -1027,6 +1184,10 @@ struct LoginView: View {
                                         icon: "calendar.circle.fill",
                                         date: $fechaNacimiento
                                     )
+                                    
+                                    // ✅ NUEVO: Mostrar edad calculada automáticamente
+                                    CalculatedAgeDisplay(birthDate: fechaNacimiento)
+                                        .animation(.easeInOut(duration: 0.3), value: fechaNacimiento)
                                     
                                     CustomSegmentedPicker(
                                         placeholder: "Género",
@@ -1055,7 +1216,9 @@ struct LoginView: View {
                                         placeholder: "Teléfono",
                                         text: $telefono,
                                         icon: "phone.fill",
-                                        keyboardType: .phonePad
+                                        keyboardType: .phonePad,
+                                        inputFilter: .numbersOnly,
+                                        maxLength: 12
                                     )
                                     
                                     CustomTextField(
@@ -1066,7 +1229,7 @@ struct LoginView: View {
                                 }
                                 .padding(.bottom, 10)
                                 
-                                // Sección: Información Física
+                                // Sección: Información Física (SIN campo de edad manual)
                                 VStack(alignment: .leading, spacing: 15) {
                                     HStack {
                                         Image(systemName: "figure.walk")
@@ -1080,25 +1243,24 @@ struct LoginView: View {
                                     }
                                     .padding(.horizontal, 5)
                                     
-                                    CustomTextField(
-                                        placeholder: "Edad",
-                                        text: $edad,
-                                        icon: "calendar",
-                                        keyboardType: .numberPad
-                                    )
+                                    // ✅ REMOVIDO: Campo manual de edad - ahora es automático
                                     
                                     CustomTextField(
                                         placeholder: "Peso (kg)",
                                         text: $peso,
                                         icon: "scalemass",
-                                        keyboardType: .decimalPad
+                                        keyboardType: .decimalPad,
+                                        inputFilter: .decimal,
+                                        maxLength: 6
                                     )
                                     
                                     CustomTextField(
                                         placeholder: "Estatura (cm)",
                                         text: $estatura,
                                         icon: "ruler",
-                                        keyboardType: .decimalPad
+                                        keyboardType: .numberPad,
+                                        inputFilter: .numbersOnly,
+                                        maxLength: 3
                                     )
                                 }
                                 .padding(.bottom, 10)
@@ -1175,9 +1337,18 @@ struct LoginView: View {
                         Button(action: {
                             Task {
                                 if isSignUp {
+                                    let validation = validateRegistrationFields()
+                                                if !validation.isValid {
+                                                    authManager.errorMessage = validation.errorMessage
+                                                    return
+                                                }
+                                                
+                                                // Limpiar mensaje de error si todo está bien
+                                                authManager.errorMessage = ""
+                                    
                                             print("🎯 INICIANDO REGISTRO DESDE BUTTON")
                                             
-                                            // Crear objeto UserData con toda la información del formulario
+                                            // ✅ CREAR OBJETO UserData SIN EDAD MANUAL - se calculará automáticamente
                                             let userData = UserData(
                                                 uid: "", // Se asignará automáticamente en signUp
                                                 email: email,
@@ -1191,7 +1362,7 @@ struct LoginView: View {
                                                 direccion: direccion,
                                                 activo: activo,
                                                 idGenero: idGenero,
-                                                edad: edad.isEmpty ? nil : edad,
+                                                edad: nil, // ✅ SE CALCULARÁ AUTOMÁTICAMENTE EN AuthManager
                                                 peso: peso.isEmpty ? nil : peso,
                                                 estatura: estatura.isEmpty ? nil : estatura,
                                                 fechaCreacion: Date(),
@@ -1199,6 +1370,8 @@ struct LoginView: View {
                                             )
                                             
                                             print("🎯 DATOS PREPARADOS, LLAMANDO A createUserWithFirestoreAndMembership")
+                                            print("🎯 Edad que se calculará: \(fechaNacimiento.calculateAge()) años")
+                                            
                                             // ✅ NUEVA FUNCIÓN QUE CREA USUARIO + MEMBRESÍA INACTIVA
                                             await authManager.createUserWithFirestoreAndMembership(email: email, password: password, userData: userData)
                                             print("🎯 createUserWithFirestoreAndMembership COMPLETADO")

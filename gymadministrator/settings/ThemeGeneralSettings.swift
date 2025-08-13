@@ -133,6 +133,8 @@ struct CustomTextField: View {
     @Binding var text: String
     let icon: String
     var keyboardType: UIKeyboardType = .default
+    var inputFilter: InputFilter = .none
+    var maxLength: Int? = nil
     
     var body: some View {
         HStack(spacing: 15) {
@@ -142,12 +144,15 @@ struct CustomTextField: View {
             
             TextField(placeholder, text: $text)
                 .keyboardType(keyboardType)
-                .autocapitalization(keyboardType == .emailAddress ? .none : .words)
-                .disableAutocorrection(keyboardType == .emailAddress)
                 .foregroundColor(.brandWhite)
+                .autocapitalization(.none)
+                .disableAutocorrection(true)
                 .placeholder(when: text.isEmpty) {
                     Text(placeholder)
-                        .foregroundColor(.brandLight)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                }
+                .onChange(of: text) { newValue in
+                    text = filtered(newValue)
                 }
         }
         .padding(.horizontal, 20)
@@ -161,6 +166,36 @@ struct CustomTextField: View {
                 .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
         )
     }
+    
+    private func filtered(_ value: String) -> String {
+        var s = value
+        switch inputFilter {
+        case .numbersOnly:
+            s = s.filter(\.isNumber)
+        case .decimal:
+            var seenDot = false
+            s = s.filter { ch in
+                if ch.isNumber { return true }
+                if ch == "." && !seenDot { seenDot = true; return true }
+                return false
+            }
+        case .lettersAndSpaces:
+            s = s.filter { $0.isLetter || $0.isWhitespace }
+        case .none:
+            break
+        }
+        if let max = maxLength, s.count > max {
+            s = String(s.prefix(max))
+        }
+        return s
+    }
+}
+
+enum InputFilter {
+    case numbersOnly
+    case decimal
+    case lettersAndSpaces
+    case none
 }
 
 // MARK: - Custom Secure Field
