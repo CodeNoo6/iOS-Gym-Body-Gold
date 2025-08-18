@@ -3317,454 +3317,162 @@ struct EnhancedMembershipRow: View {
     @ObservedObject var manager: AdminMembershipManager
     @State private var isToggling = false
     @State private var showingActivationSheet = false
-    @State private var isHovered = false
-    
-    // MARK: - Computed Properties
-    private var statusColor: Color {
-        membership.activa ? .green : .orange
-    }
-    
-    private var statusIcon: String {
-        membership.activa ? "checkmark.shield.fill" : "clock.badge.exclamationmark"
-    }
-    
-    private var backgroundGradient: LinearGradient {
-        LinearGradient(
-            colors: membership.activa ?
-                [Color.green.opacity(0.1), Color.brandBlack.opacity(0.3)] :
-                [Color.orange.opacity(0.1), Color.brandBlack.opacity(0.3)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-    
-    private var borderColor: Color {
-        membership.activa ?
-            Color.green.opacity(0.4) :
-            Color.orange.opacity(0.4)
-    }
     
     var body: some View {
-        HStack(spacing: 0) {
-            // MARK: - Left Section (Avatar + Status)
-            leftSection
+        HStack(spacing: 16) {
+            // Avatar con indicador de estado
+            ZStack {
+                Circle()
+                    .fill(membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
+                    .frame(width: 50, height: 50)
+                
+                Image(systemName: membership.activa ? "creditcard.fill" : "creditcard.trianglebadge.exclamationmark")
+                    .font(.title3)
+                    .foregroundColor(membership.activa ? .green : .orange)
+                
+                // Indicador de precio personalizado
+                if membership.hasCustomPrice {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Circle()
+                                .fill(Color.brandGold)
+                                .frame(width: 12, height: 12)
+                                .overlay(
+                                    Text("$")
+                                        .font(.caption2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.brandBlack)
+                                )
+                        }
+                    }
+                    .frame(width: 50, height: 50)
+                }
+            }
             
-            // MARK: - Center Section (Main Info)
-            centerSection
-                .padding(.horizontal, 16)
+            // Información
+            VStack(alignment: .leading, spacing: 6) {
+                Text(membership.email)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.brandLight)
+                    .lineLimit(1)
+                
+                Text(membership.tipoMembresia)
+                    .font(.caption)
+                    .foregroundColor(.brandGold)
+                
+                Text(membership.estadoDescripcion)
+                    .font(.caption2)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(
+                        membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2)
+                    )
+                    .foregroundColor(membership.activa ? .green : .orange)
+                    .cornerRadius(6)
+                
+                if membership.activa, let dias = membership.diasRestantes {
+                    Text("\(dias)d")
+                        .font(.caption2)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                }
+                
+                if let metodoPago = membership.metodoPago {
+                    Text(metodoPago.capitalized)
+                        .font(.caption2)
+                        .foregroundColor(.brandLight.opacity(0.6))
+                }
+            }
             
-            Spacer(minLength: 0)
+            Spacer()
             
-            // MARK: - Right Section (Price + Action)
-            rightSection
+            // Controles
+            VStack(spacing: 8) {
+                // Precio (con indicador de personalización)
+                VStack(spacing: 2) {
+                    if let precioPersonalizado = membership.precioPersonalizado {
+                        Text("$\(Int(precioPersonalizado).formatted())")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(.brandGold)
+                        
+                        Text("(Era $\(Int(membership.precio).formatted()))")
+                            .font(.caption2)
+                            .foregroundColor(.brandLight.opacity(0.6))
+                            .strikethrough()
+                    } else {
+                        Text("$\(Int(membership.finalDisplayPrice).formatted())")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.brandGold)
+                    }
+                }
+                
+                // Botón de acción
+                if membership.activa {
+                    Button(action: {
+                        Task {
+                            await suspendMembership()
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            if isToggling {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .brandWhite))
+                                    .scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "pause.circle.fill")
+                                    .font(.caption)
+                                Text("Suspender")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .foregroundColor(.brandWhite)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.red.opacity(0.8))
+                        .cornerRadius(6)
+                    }
+                    .disabled(isToggling)
+                } else {
+                    Button(action: {
+                        showingActivationSheet = true
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "play.circle.fill")
+                                .font(.caption)
+                            Text("Activar")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundColor(.brandWhite)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.green.opacity(0.8))
+                        .cornerRadius(6)
+                    }
+                }
+            }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
-        .background(backgroundGradient)
+        .padding(12)
+        .background(Color.brandBlack.opacity(0.3))
+        .cornerRadius(12)
         .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(borderColor, lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(membership.activa ? Color.green.opacity(0.3) : Color.orange.opacity(0.3), lineWidth: 1)
         )
-        .cornerRadius(18)
-        .shadow(
-            color: statusColor.opacity(0.2),
-            radius: isHovered ? 12 : 6,
-            x: 0, y: isHovered ? 6 : 3
-        )
-        .scaleEffect(isToggling ? 0.97 : (isHovered ? 1.02 : 1.0))
-        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: isToggling)
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isHovered)
-        .onHover { hovering in
-            isHovered = hovering
-        }
+        .scaleEffect(isToggling ? 0.97 : 1.0)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isToggling)
         .sheet(isPresented: $showingActivationSheet) {
             EnhancedMembershipActivationSheet(membership: membership, manager: manager)
         }
     }
     
-    // MARK: - Left Section (Avatar + Status Indicator)
-    private var leftSection: some View {
-        ZStack {
-            // Background Circle
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [statusColor.opacity(0.3), statusColor.opacity(0.1)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .frame(width: 60, height: 60)
-            
-            // Main Icon
-            Image(systemName: statusIcon)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [statusColor, statusColor.opacity(0.8)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .symbolEffect(.pulse, options: .repeating, value: !membership.activa)
-            
-            // Custom Price Indicator
-            if membership.hasCustomPrice {
-                VStack {
-                    HStack {
-                        Spacer()
-                        customPriceIndicator
-                    }
-                    Spacer()
-                }
-                .frame(width: 60, height: 60)
-            }
-            
-            // Expiry Warning
-            if let dias = membership.diasRestantes, dias <= 3 && membership.activa {
-                VStack {
-                    Spacer()
-                    HStack {
-                        expiryWarningIndicator
-                        Spacer()
-                    }
-                }
-                .frame(width: 60, height: 60)
-            }
-        }
-    }
-    
-    private var customPriceIndicator: some View {
-        Circle()
-            .fill(Color.brandGold)
-            .frame(width: 18, height: 18)
-            .overlay(
-                Image(systemName: "tag.fill")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(.brandBlack)
-            )
-            .overlay(
-                Circle()
-                    .stroke(Color.brandBlack.opacity(0.3), lineWidth: 1)
-            )
-    }
-    
-    private var expiryWarningIndicator: some View {
-        Circle()
-            .fill(Color.red)
-            .frame(width: 16, height: 16)
-            .overlay(
-                Image(systemName: "exclamationmark")
-                    .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(.white)
-            )
-            .symbolEffect(.bounce, options: .repeating, value: true)
-    }
-    
-    // MARK: - Center Section (Main Information)
-    private var centerSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // Email Header
-            emailHeader
-            
-            // Membership Type
-            membershipTypeLabel
-            
-            // Status Tags Row
-            statusTagsRow
-            
-            // Additional Info (if active)
-            if membership.activa {
-                additionalInfo
-            }
-        }
-    }
-    
-    private var emailHeader: some View {
-        HStack(spacing: 8) {
-            Text(membership.email)
-                .font(.system(.subheadline, design: .rounded))
-                .fontWeight(.semibold)
-                .foregroundColor(.brandLight)
-                .lineLimit(1)
-            
-            if membership.activa {
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundColor(.green)
-                    .symbolEffect(.pulse)
-            }
-        }
-    }
-    
-    private var membershipTypeLabel: some View {
-        Text(membership.tipoMembresia)
-            .font(.system(.caption, design: .rounded))
-            .fontWeight(.medium)
-            .foregroundColor(.brandGold)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 2)
-            .background(
-                Capsule()
-                    .fill(Color.brandGold.opacity(0.15))
-            )
-            .overlay(
-                Capsule()
-                    .stroke(Color.brandGold.opacity(0.3), lineWidth: 0.5)
-            )
-    }
-    
-    private var statusTagsRow: some View {
-        HStack(spacing: 6) {
-            // Status Tag
-            statusTag
-            
-            // Days Remaining (if active)
-            if membership.activa, let dias = membership.diasRestantes {
-                daysRemainingTag(dias: dias)
-            }
-            
-            // Payment Method (if available)
-            if let metodoPago = membership.metodoPago {
-                paymentMethodTag(method: metodoPago)
-            }
-        }
-    }
-    
-    private var statusTag: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 6, height: 6)
-                .symbolEffect(.pulse, options: .repeating, value: !membership.activa)
-            
-            Text(membership.estadoDescripcion)
-                .font(.system(.caption2, design: .rounded))
-                .fontWeight(.medium)
-        }
-        .foregroundColor(statusColor)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(
-            Capsule()
-                .fill(statusColor.opacity(0.15))
-        )
-    }
-    
-    private func daysRemainingTag(dias: Int) -> some View {
-        let color: Color = dias <= 3 ? .red : (dias <= 7 ? .orange : .blue)
-        
-        return HStack(spacing: 3) {
-            Image(systemName: "calendar")
-                .font(.system(size: 8))
-            Text("\(dias)d")
-                .font(.system(.caption2, design: .monospaced))
-                .fontWeight(.semibold)
-        }
-        .foregroundColor(color)
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(
-            Capsule()
-                .fill(color.opacity(0.15))
-        )
-    }
-    
-    private func paymentMethodTag(method: String) -> some View {
-        HStack(spacing: 3) {
-            Image(systemName: paymentIcon(for: method))
-                .font(.system(size: 8))
-            Text(method.prefix(4).capitalized)
-                .font(.system(.caption2, design: .rounded))
-        }
-        .foregroundColor(.brandLight.opacity(0.7))
-        .padding(.horizontal, 6)
-        .padding(.vertical, 2)
-        .background(
-            Capsule()
-                .fill(Color.brandLight.opacity(0.1))
-        )
-    }
-    
-    private var additionalInfo: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            if let duracion = membership.duracionDias {
-                infoRow(
-                    icon: "clock.arrow.circlepath",
-                    text: "Duración: \(membership.durationText)",
-                    color: .brandGold.opacity(0.8)
-                )
-            }
-            
-            if let fechaActivacion = membership.fechaActivacion {
-                infoRow(
-                    icon: "calendar.badge.checkmark",
-                    text: "Activada: \(DateFormatter.shortDate.string(from: fechaActivacion))",
-                    color: .green.opacity(0.8)
-                )
-            }
-        }
-    }
-    
-    private func infoRow(icon: String, text: String, color: Color) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 10))
-                .foregroundColor(color)
-            
-            Text(text)
-                .font(.system(.caption2, design: .rounded))
-                .foregroundColor(.brandLight.opacity(0.8))
-        }
-    }
-    
-    // MARK: - Right Section (Price + Action Button)
-    private var rightSection: some View {
-        VStack(spacing: 12) {
-            // Price Display
-            priceDisplay
-            
-            // Action Button
-            actionButton
-        }
-    }
-    
-    private var priceDisplay: some View {
-        VStack(spacing: 4) {
-            // Price Label
-            Text("PRECIO")
-                .font(.system(.caption2, design: .rounded))
-                .fontWeight(.semibold)
-                .foregroundColor(.brandGold.opacity(0.6))
-            
-            // Price with Custom Indicator
-            VStack(spacing: 2) {
-                if let precioPersonalizado = membership.precioPersonalizado {
-                    // Custom Price
-                    Text("$\(Int(precioPersonalizado).formatted())")
-                        .font(.system(.headline, design: .rounded))
-                        .fontWeight(.bold)
-                        .foregroundColor(.brandGold)
-                    
-                    // Original Price (strikethrough)
-                    Text("$\(Int(membership.precio).formatted())")
-                        .font(.system(.caption2, design: .monospaced))
-                        .foregroundColor(.brandLight.opacity(0.5))
-                        .strikethrough()
-                } else {
-                    // Regular Price
-                    Text("$\(Int(membership.finalDisplayPrice).formatted())")
-                        .font(.system(.headline, design: .rounded))
-                        .fontWeight(.bold)
-                        .foregroundColor(.brandGold)
-                }
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(Color.brandGold.opacity(0.1))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
-                )
-        )
-    }
-    
-    private var actionButton: some View {
-        Group {
-            if membership.activa {
-                suspendButton
-            } else {
-                activateButton
-            }
-        }
-    }
-    
-    private var suspendButton: some View {
-        modernButton(
-            text: "Suspender",
-            icon: "pause.circle.fill",
-            colors: [.red, .red.opacity(0.8)],
-            loading: isToggling
-        ) {
-            Task { await suspendMembership() }
-        }
-    }
-    
-    private var activateButton: some View {
-        modernButton(
-            text: "Activar",
-            icon: "play.circle.fill",
-            colors: [.green, .green.opacity(0.8)],
-            loading: false
-        ) {
-            showingActivationSheet = true
-        }
-    }
-    
-    private func modernButton(
-        text: String,
-        icon: String,
-        colors: [Color],
-        loading: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            HStack(spacing: 6) {
-                if loading {
-                    ProgressView()
-                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                        .scaleEffect(0.8)
-                } else {
-                    Image(systemName: icon)
-                        .font(.system(.caption, weight: .semibold))
-                        .symbolEffect(.bounce, value: !loading)
-                }
-                
-                Text(loading ? "..." : text)
-                    .font(.system(.caption, design: .rounded))
-                    .fontWeight(.semibold)
-            }
-            .foregroundColor(.white)
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .background(
-                LinearGradient(
-                    colors: colors,
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            )
-            .cornerRadius(10)
-            .shadow(
-                color: colors.first?.opacity(0.4) ?? .clear,
-                radius: loading ? 2 : 4,
-                x: 0, y: loading ? 1 : 2
-            )
-        }
-        .disabled(loading)
-        .scaleEffect(loading ? 0.95 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: loading)
-    }
-    
-    // MARK: - Helper Functions
-    private func paymentIcon(for method: String) -> String {
-        switch method.lowercased() {
-        case "efectivo": return "banknote"
-        case "transferencia": return "arrow.triangle.2.circlepath"
-        case "tarjeta": return "creditcard"
-        case "nequi": return "smartphone"
-        case "daviplata": return "iphone"
-        default: return "questionmark.circle"
-        }
-    }
-    
     private func suspendMembership() async {
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-            isToggling = true
-        }
+        isToggling = true
         
         await manager.toggleMembershipStatus(
             membershipId: membership.id,
@@ -3773,10 +3481,7 @@ struct EnhancedMembershipRow: View {
         )
         
         try? await Task.sleep(nanoseconds: 500_000_000)
-        
-        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
-            isToggling = false
-        }
+        isToggling = false
     }
 }
 
