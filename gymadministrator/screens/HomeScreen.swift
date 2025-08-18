@@ -1603,6 +1603,180 @@ class AdminUserManager: ObservableObject {
     }
 }
 
+// MARK: - Card de método de pago
+struct PaymentMethodCard: View {
+    let method: String
+    let isSelected: Bool
+    let action: () -> Void
+    
+    private var methodIcon: String {
+        switch method {
+        case "efectivo": return "banknote"
+        case "transferencia": return "creditcard"
+        case "tarjeta": return "creditcard.fill"
+        case "nequi": return "smartphone"
+        case "daviplata": return "smartphone.and.arrow.forward"
+        default: return "questionmark.circle"
+        }
+    }
+    
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 8) {
+                Image(systemName: methodIcon)
+                    .font(.title2)
+                    .foregroundColor(isSelected ? .brandBlack : .brandGold)
+                
+                Text(method.capitalized)
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundColor(isSelected ? .brandBlack : .brandLight)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 16)
+            .background(
+                isSelected ?
+                LinearGradient(
+                    colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ) :
+                LinearGradient(
+                    colors: [Color.brandDark, Color.brandDark.opacity(0.8)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(
+                        isSelected ? Color.brandGold : Color.brandGold.opacity(0.3),
+                        lineWidth: isSelected ? 2 : 1
+                    )
+            )
+            .scaleEffect(isSelected ? 1.05 : 1.0)
+            .animation(.spring(response: 0.3), value: isSelected)
+        }
+    }
+}
+
+// MARK: - Fila de transacción
+struct TransactionRow: View {
+    let transaction: TransactionData
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // Icono del tipo de transacción
+            Image(systemName: transaction.transactionType == "activation" ? "play.circle.fill" : "arrow.clockwise.circle.fill")
+                .font(.title3)
+                .foregroundColor(transaction.transactionType == "activation" ? .green : .blue)
+            
+            // Información
+            VStack(alignment: .leading, spacing: 2) {
+                Text(transaction.userName)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.brandLight)
+                
+                HStack {
+                    Text(transaction.membershipType)
+                        .font(.caption)
+                        .foregroundColor(.brandGold)
+                    
+                    Text("•")
+                        .foregroundColor(.brandLight.opacity(0.5))
+                    
+                    Text("\(transaction.duration) días")
+                        .font(.caption)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                    
+                    Text("•")
+                        .foregroundColor(.brandLight.opacity(0.5))
+                    
+                    Text(transaction.paymentMethod.capitalized)
+                        .font(.caption)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                }
+            }
+            
+            Spacer()
+            
+            // Monto y fecha
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("$\(Int(transaction.amount).formatted())")
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.green)
+                
+                Text(DateFormatter.shortDate.string(from: transaction.createdDate))
+                    .font(.caption2)
+                    .foregroundColor(.brandLight.opacity(0.6))
+            }
+        }
+        .padding(12)
+        .background(Color.brandBlack.opacity(0.2))
+        .cornerRadius(8)
+    }
+}
+
+// MARK: - Card de estadística
+struct StatCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.title2)
+                    .foregroundColor(color)
+                Spacer()
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(value)
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(.brandLight)
+                
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(.brandLight.opacity(0.7))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .background(Color.brandBlack.opacity(0.3))
+        .cornerRadius(12)
+    }
+}
+
+// MARK: - Mini tarjeta de estadística
+struct MiniStatCard: View {
+    let title: String
+    let value: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.subheadline)
+                .fontWeight(.bold)
+                .foregroundColor(color)
+            
+            Text(title)
+                .font(.caption2)
+                .foregroundColor(.brandLight.opacity(0.7))
+        }
+        .padding(8)
+        .background(color.opacity(0.1))
+        .cornerRadius(8)
+    }
+}
+
 // MARK: - Nuevo AdminMembershipManager para gestionar membresías
 @MainActor
 class AdminMembershipManager: ObservableObject {
@@ -1623,6 +1797,161 @@ class AdminMembershipManager: ObservableObject {
             case 180: return "6 meses"
             case 365: return "1 año"
             default: return "\(days) días"
+            }
+        }
+    
+    func activateMembershipWithCustomPriceAndHistory(
+            membershipId: String,
+            userEmail: String,
+            days: Int,
+            customPrice: Double? = nil,
+            paymentMethod: String = "efectivo",
+            notes: String? = nil,
+            adminUserId: String,
+            adminUserName: String
+        ) async {
+            do {
+                let startDate = Date()
+                let endDate = Calendar.current.date(byAdding: .day, value: days, to: startDate) ?? Date()
+                
+                // Buscar la membresía para obtener el precio original
+                let originalPrice = self.memberships.first(where: { $0.id == membershipId })?.precio ?? 0.0
+                let finalPrice = customPrice ?? originalPrice
+                
+                // 1. Actualizar membresía con precio personalizado
+                var updateData: [String: Any] = [
+                    "activa": true,
+                    "estadoDescripcion": "Activa",
+                    "fechaInicio": DateFormatter.membershipFormatter.string(from: startDate),
+                    "fechaVencimiento": DateFormatter.membershipFormatter.string(from: endDate),
+                    "diasRestantes": days,
+                    "requiereActivacion": false,
+                    "fechaActivacion": Timestamp(),
+                    "duracionDias": days,
+                    "precioFinal": finalPrice,
+                    "fechaUltimaModificacion": Timestamp(),
+                    "adminActivador": adminUserName
+                ]
+                
+                // Agregar campos de precio personalizado si aplica
+                if let customPrice = customPrice {
+                    updateData["precioPersonalizado"] = customPrice
+                    updateData["precioOriginal"] = originalPrice
+                    updateData["tieneDescuento"] = customPrice < originalPrice
+                }
+                
+                // Agregar método de pago y notas
+                updateData["metodoPago"] = paymentMethod
+                if let notes = notes, !notes.isEmpty {
+                    updateData["notasActivacion"] = notes
+                }
+                
+                try await db.collection("membresias").document(membershipId).updateData(updateData)
+                
+                print("✅ Membresía activada:")
+                print("- ID: \(membershipId)")
+                print("- Email: \(userEmail)")
+                print("- Duración: \(days) días")
+                print("- Precio original: $\(originalPrice)")
+                print("- Precio final: $\(finalPrice)")
+                print("- Método de pago: \(paymentMethod)")
+                
+                // 2. Registrar transacción en historial de ganancias
+                let userName = userEmail.components(separatedBy: "@").first ?? "Usuario"
+                
+                let success = await RevenueManager.shared.recordTransaction(
+                    userEmail: userEmail,
+                    userName: userName,
+                    membershipType: "Básica", // Podrías obtener el tipo real desde la membresía
+                    originalPrice: originalPrice,
+                    customPrice: customPrice,
+                    duration: days,
+                    transactionType: "activation",
+                    paymentMethod: paymentMethod,
+                    membershipStartDate: startDate,
+                    membershipEndDate: endDate,
+                    adminUserId: adminUserId,
+                    adminUserName: adminUserName,
+                    notes: notes
+                )
+                
+                if success {
+                    print("✅ Transacción registrada en historial de ganancias")
+                } else {
+                    print("❌ Error registrando transacción en historial")
+                }
+                
+                // 3. Enviar notificación personalizada con precio
+                await sendCustomActivationNotificationWithPrice(
+                    userEmail: userEmail,
+                    days: days,
+                    endDate: endDate,
+                    finalPrice: finalPrice,
+                    paymentMethod: paymentMethod
+                )
+                
+            } catch {
+                await MainActor.run {
+                    errorMessage = "Error al activar membresía: \(error.localizedDescription)"
+                    print("❌ Error activando membresía: \(error.localizedDescription)")
+                }
+            }
+        }
+        
+        // ✅ FUNCIÓN AUXILIAR: Notificación con información de precio
+        private func sendCustomActivationNotificationWithPrice(
+            userEmail: String,
+            days: Int,
+            endDate: Date,
+            finalPrice: Double,
+            paymentMethod: String
+        ) async {
+            do {
+                let snapshot = try await db.collection("usuarios")
+                    .whereField("email", isEqualTo: userEmail)
+                    .getDocuments()
+                
+                guard let userDoc = snapshot.documents.first,
+                      let fcmToken = userDoc.data()["fcmToken"] as? String,
+                      let userName = userDoc.data()["nombre"] as? String else {
+                    print("❌ No se encontró FCM token para el usuario: \(userEmail)")
+                    return
+                }
+                
+                let formattedDate = DateFormatter.membershipFormatter.string(from: endDate)
+                let durationText = getDurationText(days: days)
+                
+                let title = "🎉 ¡Membresía Activada!"
+                let body = """
+                ¡Hola \(userName)! Tu membresía ha sido activada:
+                
+                📅 Duración: \(durationText) (\(days) días)
+                💰 Monto: $\(Int(finalPrice).formatted())
+                💳 Pago: \(paymentMethod.capitalized)
+                ⏰ Vence: \(formattedDate)
+                
+                ¡Ya puedes entrenar! 💪
+                """
+                
+                await FCMNotificationManager.shared.sendNotificationToUser(
+                    userId: userDoc.documentID,
+                    title: title,
+                    body: body,
+                    data: [
+                        "type": "membership_activated",
+                        "duration_days": "\(days)",
+                        "end_date": formattedDate,
+                        "final_price": "\(finalPrice)",
+                        "payment_method": paymentMethod,
+                        "timestamp": "\(Date().timeIntervalSince1970)"
+                    ],
+                    directToken: fcmToken
+                )
+                
+                print("📱 Notificación de activación con precio enviada")
+                
+            } catch {
+                print("❌ Error enviando notificación: \(error.localizedDescription)")
             }
         }
     
@@ -1951,146 +2280,68 @@ class MembershipDayTracker: ObservableObject {
 // MARK: - Modelo de datos para membresías en admin panel
 
 // MARK: - MembershipData ACTUALIZADO con soporte para días personalizados
-struct MembershipData: Identifiable {
+struct MembershipData: Identifiable, Codable {
     let id: String
     let userUID: String
     let email: String
     let tipoMembresia: String
     let precio: Double
-    let fechaInicio: String
-    let fechaVencimiento: String
     let activa: Bool
     let estadoDescripcion: String
+    let fechaInicio: String
+    let fechaVencimiento: String
     let diasRestantes: Int?
     let requiereActivacion: Bool
-    let duracionDias: Int? // ✅ NUEVO: Duración original en días
-    let fechaActivacion: Date? // ✅ NUEVO: Cuándo se activó
+    let fechaCreacion: Date
+    let duracionDias: Int?
+    let fechaActivacion: Date?
     
-    // ✅ Inicializador desde QueryDocumentSnapshot ACTUALIZADO
+    // ✅ NUEVOS CAMPOS PARA PRECIOS PERSONALIZADOS
+    let precioPersonalizado: Double?
+    let precioOriginal: Double?
+    let metodoPago: String?
+    let tieneDescuento: Bool?
+    let precioFinal: Double?
+    let notasActivacion: String?
+    let adminActivador: String?
+    let fechaUltimaModificacion: Date?
+    
     init(from document: QueryDocumentSnapshot) {
         let data = document.data()
+        
+        // Campos originales
         self.id = document.documentID
         self.userUID = data["userUID"] as? String ?? ""
         self.email = data["email"] as? String ?? ""
-        self.tipoMembresia = data["tipoMembresia"] as? String ?? ""
+        self.tipoMembresia = data["tipoMembresia"] as? String ?? "Básica"
         self.precio = data["precio"] as? Double ?? 0.0
+        self.activa = data["activa"] as? Bool ?? false
+        self.estadoDescripcion = data["estadoDescripcion"] as? String ?? "Pendiente"
         self.fechaInicio = data["fechaInicio"] as? String ?? ""
         self.fechaVencimiento = data["fechaVencimiento"] as? String ?? ""
-        self.activa = data["activa"] as? Bool ?? false
-        
-        // ✅ Estado basado en activa
-        if let estadoFromData = data["estadoDescripcion"] as? String {
-            self.estadoDescripcion = estadoFromData
-        } else {
-            self.estadoDescripcion = (data["activa"] as? Bool ?? false) ? "Activa" : "Suspendida"
-        }
-        
         self.diasRestantes = data["diasRestantes"] as? Int
-        self.requiereActivacion = data["requiereActivacion"] as? Bool ?? false
-        self.duracionDias = data["duracionDias"] as? Int // ✅ NUEVO
-        
-        // ✅ NUEVO: Fecha de activación
-        if let timestamp = data["fechaActivacion"] as? Timestamp {
-            self.fechaActivacion = timestamp.dateValue()
-        } else {
-            self.fechaActivacion = nil
-        }
-    }
-    
-    // ✅ Inicializador desde DocumentSnapshot ACTUALIZADO
-    init(from document: DocumentSnapshot) {
-        guard let data = document.data() else {
-            self.id = document.documentID
-            self.userUID = ""
-            self.email = ""
-            self.tipoMembresia = ""
-            self.precio = 0.0
-            self.fechaInicio = ""
-            self.fechaVencimiento = ""
-            self.activa = false
-            self.estadoDescripcion = ""
-            self.diasRestantes = nil
-            self.requiereActivacion = false
-            self.duracionDias = nil
-            self.fechaActivacion = nil
-            return
-        }
-        
-        self.id = document.documentID
-        self.userUID = data["userUID"] as? String ?? ""
-        self.email = data["email"] as? String ?? ""
-        self.tipoMembresia = data["tipoMembresia"] as? String ?? ""
-        self.precio = data["precio"] as? Double ?? 0.0
-        self.fechaInicio = data["fechaInicio"] as? String ?? ""
-        self.fechaVencimiento = data["fechaVencimiento"] as? String ?? ""
-        self.activa = data["activa"] as? Bool ?? false
-        
-        if let estadoFromData = data["estadoDescripcion"] as? String {
-            self.estadoDescripcion = estadoFromData
-        } else {
-            self.estadoDescripcion = (data["activa"] as? Bool ?? false) ? "Activa" : "Suspendida"
-        }
-        
-        self.diasRestantes = data["diasRestantes"] as? Int
-        self.requiereActivacion = data["requiereActivacion"] as? Bool ?? false
+        self.requiereActivacion = data["requiereActivacion"] as? Bool ?? true
+        self.fechaCreacion = (data["fechaCreacion"] as? Timestamp)?.dateValue() ?? Date()
         self.duracionDias = data["duracionDias"] as? Int
+        self.fechaActivacion = (data["fechaActivacion"] as? Timestamp)?.dateValue()
         
-        if let timestamp = data["fechaActivacion"] as? Timestamp {
-            self.fechaActivacion = timestamp.dateValue()
-        } else {
-            self.fechaActivacion = nil
-        }
+        // ✅ NUEVOS CAMPOS
+        self.precioPersonalizado = data["precioPersonalizado"] as? Double
+        self.precioOriginal = data["precioOriginal"] as? Double
+        self.metodoPago = data["metodoPago"] as? String
+        self.tieneDescuento = data["tieneDescuento"] as? Bool
+        self.precioFinal = data["precioFinal"] as? Double
+        self.notasActivacion = data["notasActivacion"] as? String
+        self.adminActivador = data["adminActivador"] as? String
+        self.fechaUltimaModificacion = (data["fechaUltimaModificacion"] as? Timestamp)?.dateValue()
     }
-    
-    // ✅ Inicializador manual ACTUALIZADO
-    init(
-        id: String,
-        userUID: String,
-        email: String,
-        tipoMembresia: String,
-        precio: Double,
-        fechaInicio: String,
-        fechaVencimiento: String,
-        activa: Bool,
-        estadoDescripcion: String,
-        diasRestantes: Int? = nil,
-        requiereActivacion: Bool,
-        duracionDias: Int? = nil,
-        fechaActivacion: Date? = nil
-    ) {
-        self.id = id
-        self.userUID = userUID
-        self.email = email
-        self.tipoMembresia = tipoMembresia
-        self.precio = precio
-        self.fechaInicio = fechaInicio
-        self.fechaVencimiento = fechaVencimiento
-        self.activa = activa
-        self.estadoDescripcion = estadoDescripcion
-        self.diasRestantes = diasRestantes
-        self.requiereActivacion = requiereActivacion
-        self.duracionDias = duracionDias
-        self.fechaActivacion = fechaActivacion
-    }
-    
-    // ✅ NUEVAS: Funciones de utilidad
-    var isExpiringSoon: Bool {
-        guard let days = diasRestantes else { return false }
-        return days <= 7 && activa
-    }
-    
-    var isExpiredToday: Bool {
-        guard let days = diasRestantes else { return false }
-        return days <= 0 && activa
-    }
-    
+}
+
+extension MembershipData {
     var durationText: String {
-        guard let duration = duracionDias else { return "No especificado" }
-        return getDurationText(days: duration)
-    }
-    
-    private func getDurationText(days: Int) -> String {
-        switch days {
+        guard let duracion = duracionDias else { return "N/A" }
+        
+        switch duracion {
         case 1: return "1 día"
         case 7: return "1 semana"
         case 15: return "15 días"
@@ -2099,8 +2350,31 @@ struct MembershipData: Identifiable {
         case 90: return "3 meses"
         case 180: return "6 meses"
         case 365: return "1 año"
-        default: return "\(days) días"
+        default: return "\(duracion) días"
         }
+    }
+    
+    var isExpiringSoon: Bool {
+        guard let dias = diasRestantes else { return false }
+        return dias <= 7 && dias > 0
+    }
+    
+    var isExpiredToday: Bool {
+        guard let dias = diasRestantes else { return false }
+        return dias <= 0
+    }
+    
+    var hasCustomPrice: Bool {
+        return precioPersonalizado != nil
+    }
+    
+    var discountAmount: Double {
+        guard let personalizado = precioPersonalizado else { return 0 }
+        return precio - personalizado
+    }
+    
+    var finalDisplayPrice: Double {
+        return precioFinal ?? precioPersonalizado ?? precio
     }
 }
 
@@ -2514,6 +2788,1146 @@ struct AdminMembershipRow: View {
     }
 }
 
+struct RevenueDashboard: View {
+    @StateObject private var revenueManager = RevenueManager.shared
+    @State private var selectedPeriod: String = "month"
+    
+    private let periods = ["day": "Hoy", "week": "Semana", "month": "Mes", "year": "Año"]
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("💰 Ganancias")
+                    .font(.headline)
+                    .foregroundColor(.brandLight)
+                
+                Spacer()
+                
+                // Selector de período
+                Picker("Período", selection: $selectedPeriod) {
+                    ForEach(periods.keys.sorted(), id: \.self) { key in
+                        Text(periods[key] ?? key).tag(key)
+                    }
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .frame(width: 200)
+            }
+            
+            // Estadísticas principales
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 12) {
+                StatCard(
+                    title: "Total General",
+                    value: "$\(Int(revenueManager.totalRevenue).formatted())",
+                    icon: "dollarsign.circle.fill",
+                    color: .green
+                )
+                
+                StatCard(
+                    title: "Este Mes",
+                    value: "$\(Int(revenueManager.monthlyRevenue).formatted())",
+                    icon: "calendar.circle.fill",
+                    color: .brandGold
+                )
+            }
+            
+            // Lista de transacciones recientes
+            if !revenueManager.transactions.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Transacciones Recientes")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.brandGold)
+                    
+                    LazyVStack(spacing: 8) {
+                        ForEach(Array(revenueManager.transactions.prefix(5))) { transaction in
+                            TransactionRow(transaction: transaction)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .background(Color.brandDark)
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+        )
+        .onAppear {
+            Task {
+                await revenueManager.loadTransactions()
+            }
+        }
+    }
+}
+
+struct EnhancedMembershipActivationSheet: View {
+    let membership: MembershipData
+    let manager: AdminMembershipManager
+    @Environment(\.dismiss) private var dismiss
+    
+    @State private var selectedDays: Int = 30
+    @State private var customDays: String = "30"
+    @State private var customPrice: String = ""
+    @State private var useCustomPrice: Bool = false
+    @State private var selectedPaymentMethod: String = "efectivo"
+    @State private var notes: String = ""
+    @State private var isActivating = false
+    @State private var showingConfirmation = false
+    
+    @StateObject private var revenueManager = RevenueManager.shared
+    
+    // Opciones predefinidas de días
+    private let dayOptions = [7, 15, 30, 60, 90, 180, 365]
+    
+    // Métodos de pago
+    private let paymentMethods = ["efectivo", "transferencia", "tarjeta", "nequi", "daviplata"]
+    
+    var calculatedEndDate: Date {
+        Calendar.current.date(byAdding: .day, value: selectedDays, to: Date()) ?? Date()
+    }
+    
+    var finalPrice: Double {
+        if useCustomPrice, let price = Double(customPrice), price > 0 {
+            return price
+        }
+        return membership.precio
+    }
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.brandBlack.ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // Header
+                        VStack(spacing: 12) {
+                            Image(systemName: "calendar.badge.plus")
+                                .font(.system(size: 50))
+                                .foregroundColor(.brandGold)
+                            
+                            Text("Activar Membresía")
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.brandGold)
+                            
+                            Text("Configura duración, precio y método de pago")
+                                .font(.subheadline)
+                                .foregroundColor(.brandLight.opacity(0.7))
+                                .multilineTextAlignment(.center)
+                        }
+                        
+                        // Información de la membresía
+                        membershipInfoSection
+                        
+                        // Selección de duración
+                        durationSelectionSection
+                        
+                        // Configuración de precio
+                        pricingSection
+                        
+                        // Método de pago
+                        paymentMethodSection
+                        
+                        // Notas adicionales
+                        notesSection
+                        
+                        // Previsualización
+                        previewSection
+                        
+                        // Botón de activación
+                        activationButton
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                }
+            }
+            .navigationTitle("Activar Membresía")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancelar") {
+                        dismiss()
+                    }
+                    .foregroundColor(.brandLight)
+                    .disabled(isActivating)
+                }
+            }
+            .alert("Confirmar Activación", isPresented: $showingConfirmation) {
+                Button("Activar", role: .cancel) {
+                    Task {
+                        await activateMembership()
+                    }
+                }
+                Button("Cancelar", role: .destructive) { }
+            } message: {
+                Text("¿Activar membresía por \(selectedDays) días por $\(Int(finalPrice).formatted())?\n\nMétodo: \(selectedPaymentMethod.capitalized)")
+            }
+            .onAppear {
+                customPrice = "\(Int(membership.precio))"
+            }
+            .preferredColorScheme(.dark)
+        }
+    }
+    
+    // MARK: - Sección de información de membresía
+    private var membershipInfoSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Información de la Membresía")
+                .font(.headline)
+                .foregroundColor(.brandGold)
+            
+            VStack(spacing: 8) {
+                HStack {
+                    Text("Usuario:")
+                        .foregroundColor(.brandLight.opacity(0.7))
+                    Spacer()
+                    Text(membership.email)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.brandLight)
+                }
+                
+                HStack {
+                    Text("Tipo:")
+                        .foregroundColor(.brandLight.opacity(0.7))
+                    Spacer()
+                    Text(membership.tipoMembresia)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.brandGold)
+                }
+                
+                HStack {
+                    Text("Precio Base:")
+                        .foregroundColor(.brandLight.opacity(0.7))
+                    Spacer()
+                    Text("$\(Int(membership.precio).formatted())")
+                        .fontWeight(.bold)
+                        .foregroundColor(.green)
+                }
+            }
+            .padding(16)
+            .background(Color.brandDark.opacity(0.5))
+            .cornerRadius(12)
+        }
+    }
+    
+    // MARK: - Sección de selección de duración
+    private var durationSelectionSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Duración de la Membresía")
+                .font(.headline)
+                .foregroundColor(.brandGold)
+            
+            Text("Opciones rápidas:")
+                .font(.subheadline)
+                .foregroundColor(.brandLight.opacity(0.8))
+            
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
+                ForEach(dayOptions, id: \.self) { days in
+                    DayOptionCard(
+                        days: days,
+                        isSelected: selectedDays == days,
+                        action: {
+                            selectedDays = days
+                            customDays = "\(days)"
+                        }
+                    )
+                }
+            }
+            
+            // Campo personalizado
+            VStack(alignment: .leading, spacing: 8) {
+                Text("O ingresa días personalizados:")
+                    .font(.subheadline)
+                    .foregroundColor(.brandLight.opacity(0.8))
+                
+                TextField("Número de días", text: $customDays)
+                    .keyboardType(.numberPad)
+                    .padding(12)
+                    .background(Color.brandDark)
+                    .foregroundColor(.brandWhite)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
+                    )
+                    .onChange(of: customDays) { newValue in
+                        if let days = Int(newValue), days > 0 {
+                            selectedDays = days
+                        }
+                    }
+            }
+        }
+    }
+    
+    // MARK: - Sección de configuración de precio
+    private var pricingSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Configuración de Precio")
+                .font(.headline)
+                .foregroundColor(.brandGold)
+            
+            // Toggle para precio personalizado
+            Toggle("Usar precio personalizado", isOn: $useCustomPrice)
+                .toggleStyle(SwitchToggleStyle(tint: .brandGold))
+                .foregroundColor(.brandLight)
+            
+            if useCustomPrice {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Precio personalizado:")
+                        .font(.subheadline)
+                        .foregroundColor(.brandLight.opacity(0.8))
+                    
+                    HStack {
+                        Text("$")
+                            .font(.title2)
+                            .foregroundColor(.brandGold)
+                        
+                        TextField("0", text: $customPrice)
+                            .keyboardType(.numberPad)
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                    }
+                    .padding(12)
+                    .background(Color.brandDark)
+                    .foregroundColor(.brandWhite)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
+                    )
+                }
+            }
+            
+            // Mostrar cálculos
+            VStack(spacing: 8) {
+                HStack {
+                    Text("Precio total:")
+                        .foregroundColor(.brandLight.opacity(0.7))
+                    Spacer()
+                    Text("$\(Int(finalPrice).formatted())")
+                        .font(.title3)
+                        .fontWeight(.bold)
+                        .foregroundColor(.brandGold)
+                }
+                
+                if useCustomPrice {
+                    let discount = membership.precio - finalPrice
+                    if discount > 0 {
+                        HStack {
+                            Text("Descuento:")
+                                .foregroundColor(.green.opacity(0.8))
+                            Spacer()
+                            Text("-$\(Int(discount).formatted())")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.green)
+                        }
+                    } else if discount < 0 {
+                        HStack {
+                            Text("Recargo:")
+                                .foregroundColor(.orange.opacity(0.8))
+                            Spacer()
+                            Text("+$\(Int(abs(discount)).formatted())")
+                                .fontWeight(.semibold)
+                                .foregroundColor(.orange)
+                        }
+                    }
+                }
+            }
+            .padding(12)
+            .background(Color.brandDark.opacity(0.3))
+            .cornerRadius(8)
+        }
+    }
+    
+    // MARK: - Sección de método de pago
+    private var paymentMethodSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Método de Pago")
+                .font(.headline)
+                .foregroundColor(.brandGold)
+            
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 12) {
+                ForEach(paymentMethods, id: \.self) { method in
+                    PaymentMethodCard(
+                        method: method,
+                        isSelected: selectedPaymentMethod == method,
+                        action: {
+                            selectedPaymentMethod = method
+                        }
+                    )
+                }
+            }
+        }
+    }
+    
+    // MARK: - Sección de notas
+    private var notesSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Notas adicionales (opcional)")
+                .font(.subheadline)
+                .foregroundColor(.brandLight.opacity(0.8))
+            
+            TextField("Agregar comentarios sobre esta activación...", text: $notes, axis: .vertical)
+                .lineLimit(2...4)
+                .padding(12)
+                .background(Color.brandDark)
+                .foregroundColor(.brandWhite)
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
+                )
+        }
+    }
+    
+    // MARK: - Sección de previsualización
+    private var previewSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Resumen de Activación")
+                .font(.headline)
+                .foregroundColor(.brandGold)
+            
+            VStack(spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Fecha de Inicio")
+                            .font(.caption)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        Text(DateFormatter.membershipFormatter.string(from: Date()))
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.brandLight)
+                    }
+                    
+                    Spacer()
+                    
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("Fecha de Vencimiento")
+                            .font(.caption)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        Text(DateFormatter.membershipFormatter.string(from: calculatedEndDate))
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.brandLight)
+                    }
+                }
+                
+                Divider().background(Color.brandGold.opacity(0.3))
+                
+                VStack(spacing: 8) {
+                    HStack {
+                        Text("Duración:")
+                        Spacer()
+                        Text("\(selectedDays) días")
+                            .fontWeight(.semibold)
+                    }
+                    
+                    HStack {
+                        Text("Método de pago:")
+                        Spacer()
+                        Text(selectedPaymentMethod.capitalized)
+                            .fontWeight(.semibold)
+                    }
+                    
+                    HStack {
+                        Text("Total a cobrar:")
+                        Spacer()
+                        Text("$\(Int(finalPrice).formatted())")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(.brandGold)
+                    }
+                }
+                .font(.subheadline)
+                .foregroundColor(.brandLight)
+            }
+            .padding(16)
+            .background(Color.brandDark.opacity(0.3))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+            )
+        }
+    }
+    
+    // MARK: - Botón de activación
+    private var activationButton: some View {
+        Button(action: {
+            showingConfirmation = true
+        }) {
+            HStack {
+                if isActivating {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .brandBlack))
+                        .scaleEffect(0.8)
+                } else {
+                    Image(systemName: "checkmark.circle.fill")
+                }
+                
+                Text(isActivating ? "Procesando..." : "Activar Membresía")
+                    .fontWeight(.semibold)
+            }
+            .foregroundColor(.brandBlack)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity)
+            .background(
+                LinearGradient(
+                    colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
+            .cornerRadius(12)
+            .disabled(isActivating || selectedDays <= 0 || (useCustomPrice && Double(customPrice) == nil))
+        }
+        .scaleEffect(isActivating ? 0.98 : 1.0)
+        .animation(.spring(response: 0.3), value: isActivating)
+    }
+    
+    // MARK: - Función de activación con registro de ingresos
+    private func activateMembership() async {
+        isActivating = true
+        
+        // ✅ OBTENER DATOS DEL ADMIN ACTUAL - IMPORTANTE: Aquí debes usar datos reales
+        let adminUserId = Auth.auth().currentUser?.uid ?? "unknown_admin"
+        let adminUserName = "Admin Usuario" // Aquí podrías obtener el nombre real del admin logueado
+        
+        // Usar la nueva función con precios personalizados
+        await manager.activateMembershipWithCustomPriceAndHistory(
+            membershipId: membership.id,
+            userEmail: membership.email,
+            days: selectedDays,
+            customPrice: useCustomPrice ? Double(customPrice) : nil,
+            paymentMethod: selectedPaymentMethod,
+            notes: notes.isEmpty ? nil : notes,
+            adminUserId: adminUserId,
+            adminUserName: adminUserName
+        )
+        
+        // Delay para mejor UX
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        
+        isActivating = false
+        dismiss()
+    }
+}
+
+struct EnhancedMembershipRow: View {
+    let membership: MembershipData
+    @ObservedObject var manager: AdminMembershipManager
+    @State private var isToggling = false
+    @State private var showingActivationSheet = false
+    
+    var body: some View {
+        HStack(spacing: 16) {
+            // Avatar con indicador de estado
+            ZStack {
+                Circle()
+                    .fill(membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
+                    .frame(width: 50, height: 50)
+                
+                Image(systemName: membership.activa ? "creditcard.fill" : "creditcard.trianglebadge.exclamationmark")
+                    .font(.title3)
+                    .foregroundColor(membership.activa ? .green : .orange)
+                
+                // Indicador de precio personalizado
+                if membership.hasCustomPrice {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Circle()
+                                .fill(Color.brandGold)
+                                .frame(width: 12, height: 12)
+                                .overlay(
+                                    Text("$")
+                                        .font(.caption2)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.brandBlack)
+                                )
+                        }
+                    }
+                    .frame(width: 50, height: 50)
+                }
+            }
+            
+            // Información
+            VStack(alignment: .leading, spacing: 6) {
+                Text(membership.email)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.brandLight)
+                    .lineLimit(1)
+                
+                Text(membership.tipoMembresia)
+                    .font(.caption)
+                    .foregroundColor(.brandGold)
+                
+                // Estado con información adicional
+                HStack(spacing: 8) {
+                    Text(membership.estadoDescripcion)
+                        .font(.caption2)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(
+                            membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2)
+                        )
+                        .foregroundColor(membership.activa ? .green : .orange)
+                        .cornerRadius(6)
+                    
+                    if membership.activa, let dias = membership.diasRestantes {
+                        Text("\(dias)d")
+                            .font(.caption2)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                    }
+                    
+                    if let metodoPago = membership.metodoPago {
+                        Text(metodoPago.capitalized)
+                            .font(.caption2)
+                            .foregroundColor(.brandLight.opacity(0.6))
+                    }
+                }
+            }
+            
+            Spacer()
+            
+            // Controles
+            VStack(spacing: 8) {
+                // Precio (con indicador de personalización)
+                VStack(spacing: 2) {
+                    if let precioPersonalizado = membership.precioPersonalizado {
+                        Text("$\(Int(precioPersonalizado).formatted())")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(.brandGold)
+                        
+                        Text("(Era $\(Int(membership.precio).formatted()))")
+                            .font(.caption2)
+                            .foregroundColor(.brandLight.opacity(0.6))
+                            .strikethrough()
+                    } else {
+                        Text("$\(Int(membership.finalDisplayPrice).formatted())")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.brandGold)
+                    }
+                }
+                
+                // Botón de acción
+                if membership.activa {
+                    Button(action: {
+                        Task {
+                            await suspendMembership()
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            if isToggling {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .brandWhite))
+                                    .scaleEffect(0.7)
+                            } else {
+                                Image(systemName: "pause.circle.fill")
+                                    .font(.caption)
+                                Text("Suspender")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                            }
+                        }
+                        .foregroundColor(.brandWhite)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.red.opacity(0.8))
+                        .cornerRadius(6)
+                    }
+                    .disabled(isToggling)
+                } else {
+                    Button(action: {
+                        showingActivationSheet = true
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "play.circle.fill")
+                                .font(.caption)
+                            Text("Activar")
+                                .font(.caption2)
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundColor(.brandWhite)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.green.opacity(0.8))
+                        .cornerRadius(6)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(Color.brandBlack.opacity(0.3))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(membership.activa ? Color.green.opacity(0.3) : Color.orange.opacity(0.3), lineWidth: 1)
+        )
+        .scaleEffect(isToggling ? 0.97 : 1.0)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isToggling)
+        .sheet(isPresented: $showingActivationSheet) {
+            EnhancedMembershipActivationSheet(membership: membership, manager: manager)
+        }
+    }
+    
+    private func suspendMembership() async {
+        isToggling = true
+        
+        await manager.toggleMembershipStatus(
+            membershipId: membership.id,
+            userEmail: membership.email,
+            currentStatus: membership.activa
+        )
+        
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        isToggling = false
+    }
+}
+
+struct DetailedTransactionRow: View {
+    let transaction: TransactionData
+    @State private var isExpanded = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Fila principal
+            HStack(spacing: 12) {
+                // Icono del tipo de transacción
+                ZStack {
+                    Circle()
+                        .fill(transaction.transactionType == "activation" ? Color.green.opacity(0.2) : Color.blue.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                    
+                    Image(systemName: transaction.transactionType == "activation" ? "play.circle.fill" : "arrow.clockwise.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(transaction.transactionType == "activation" ? .green : .blue)
+                }
+                
+                // Información principal
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(transaction.userName)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.brandLight)
+                    
+                    Text(transaction.userEmail)
+                        .font(.caption2)
+                        .foregroundColor(.brandLight.opacity(0.6))
+                    
+                    HStack {
+                        Text(transaction.membershipType)
+                            .font(.caption)
+                            .foregroundColor(.brandGold)
+                        
+                        Text("•")
+                            .foregroundColor(.brandLight.opacity(0.5))
+                        
+                        Text("\(transaction.duration) días")
+                            .font(.caption)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        
+                        Text("•")
+                            .foregroundColor(.brandLight.opacity(0.5))
+                        
+                        Text(transaction.paymentMethod.capitalized)
+                            .font(.caption)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                    }
+                }
+                
+                Spacer()
+                
+                // Monto y fecha
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("$\(Int(transaction.amount).formatted())")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.green)
+                    
+                    Text(DateFormatter.shortDate.string(from: transaction.createdDate))
+                        .font(.caption2)
+                        .foregroundColor(.brandLight.opacity(0.6))
+                    
+                    // Indicador de precio personalizado
+                    if transaction.customPrice != nil {
+                        HStack(spacing: 2) {
+                            Image(systemName: "tag.fill")
+                                .font(.caption2)
+                                .foregroundColor(.brandGold)
+                            Text("Personalizado")
+                                .font(.caption2)
+                                .foregroundColor(.brandGold)
+                        }
+                    }
+                }
+                
+                // Botón para expandir
+                Button(action: {
+                    withAnimation(.spring(response: 0.4)) {
+                        isExpanded.toggle()
+                    }
+                }) {
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption)
+                        .foregroundColor(.brandGold)
+                }
+            }
+            .padding(12)
+            .background(Color.brandBlack.opacity(0.2))
+            .cornerRadius(8)
+            
+            // Detalles expandidos
+            if isExpanded {
+                VStack(spacing: 8) {
+                    Divider()
+                        .background(Color.brandGold.opacity(0.3))
+                    
+                    VStack(spacing: 6) {
+                        // Detalles de precio
+                        if let customPrice = transaction.customPrice {
+                            HStack {
+                                Text("Precio original:")
+                                    .font(.caption)
+                                    .foregroundColor(.brandLight.opacity(0.7))
+                                Spacer()
+                                Text("$\(Int(transaction.originalPrice).formatted())")
+                                    .font(.caption)
+                                    .foregroundColor(.brandLight.opacity(0.7))
+                                    .strikethrough()
+                            }
+                            
+                            HStack {
+                                Text("Precio aplicado:")
+                                    .font(.caption)
+                                    .foregroundColor(.brandLight.opacity(0.7))
+                                Spacer()
+                                Text("$\(Int(customPrice).formatted())")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.brandGold)
+                            }
+                            
+                            let discount = transaction.originalPrice - customPrice
+                            if discount > 0 {
+                                HStack {
+                                    Text("Descuento:")
+                                        .font(.caption)
+                                        .foregroundColor(.green.opacity(0.8))
+                                    Spacer()
+                                    Text("-$\(Int(discount).formatted())")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.green)
+                                }
+                            } else if discount < 0 {
+                                HStack {
+                                    Text("Recargo:")
+                                        .font(.caption)
+                                        .foregroundColor(.orange.opacity(0.8))
+                                    Spacer()
+                                    Text("+$\(Int(abs(discount)).formatted())")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                        .foregroundColor(.orange)
+                                }
+                            }
+                        }
+                        
+                        // Fechas de membresía
+                        HStack {
+                            Text("Inicio membresía:")
+                                .font(.caption)
+                                .foregroundColor(.brandLight.opacity(0.7))
+                            Spacer()
+                            Text(DateFormatter.membershipFormatter.string(from: transaction.membershipStartDate))
+                                .font(.caption)
+                                .foregroundColor(.brandLight)
+                        }
+                        
+                        HStack {
+                            Text("Vencimiento:")
+                                .font(.caption)
+                                .foregroundColor(.brandLight.opacity(0.7))
+                            Spacer()
+                            Text(DateFormatter.membershipFormatter.string(from: transaction.membershipEndDate))
+                                .font(.caption)
+                                .foregroundColor(.brandLight)
+                        }
+                        
+                        // Admin que procesó
+                        HStack {
+                            Text("Procesado por:")
+                                .font(.caption)
+                                .foregroundColor(.brandLight.opacity(0.7))
+                            Spacer()
+                            Text(transaction.adminUserName)
+                                .font(.caption)
+                                .foregroundColor(.brandGold)
+                        }
+                        
+                        // Notas si existen
+                        if let notes = transaction.notes, !notes.isEmpty {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Notas:")
+                                    .font(.caption)
+                                    .foregroundColor(.brandLight.opacity(0.7))
+                                
+                                Text(notes)
+                                    .font(.caption)
+                                    .foregroundColor(.brandLight)
+                                    .padding(8)
+                                    .background(Color.brandDark.opacity(0.5))
+                                    .cornerRadius(6)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.bottom, 12)
+                .background(Color.brandBlack.opacity(0.1))
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .background(Color.brandBlack.opacity(0.2))
+        .cornerRadius(8)
+    }
+}
+
+struct RevenueDetailsSheet: View {
+    @StateObject private var revenueManager = RevenueManager.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedPeriod: String = "all"
+    
+    private let periods = [
+        "day": "Hoy",
+        "week": "Esta Semana",
+        "month": "Este Mes",
+        "year": "Este Año",
+        "all": "Todo el Tiempo"
+    ]
+    
+    var body: some View {
+        NavigationView {
+            ZStack {
+                Color.brandBlack.ignoresSafeArea()
+                
+                ScrollView {
+                    VStack(spacing: 20) {
+                        // Estadísticas principales
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 16) {
+                            StatCard(
+                                title: "Total General",
+                                value: "$\(Int(revenueManager.totalRevenue).formatted())",
+                                icon: "dollarsign.circle.fill",
+                                color: .green
+                            )
+                            
+                            StatCard(
+                                title: "Este Mes",
+                                value: "$\(Int(revenueManager.monthlyRevenue).formatted())",
+                                icon: "calendar.circle.fill",
+                                color: .brandGold
+                            )
+                            
+                            StatCard(
+                                title: "Transacciones",
+                                value: "\(revenueManager.transactions.count)",
+                                icon: "list.number",
+                                color: .blue
+                            )
+                            
+                            StatCard(
+                                title: "Promedio",
+                                value: "$\(Int(averageTransaction).formatted())",
+                                icon: "chart.line.uptrend.xyaxis",
+                                color: .purple
+                            )
+                        }
+                        
+                        // Gráfico por métodos de pago
+                        paymentMethodsChart
+                        
+                        // Lista completa de transacciones
+                        transactionsList
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                }
+            }
+            .navigationTitle("Historial de Ingresos")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Cerrar") {
+                        dismiss()
+                    }
+                    .foregroundColor(.brandGold)
+                }
+            }
+            .preferredColorScheme(.dark)
+        }
+    }
+    
+    private var averageTransaction: Double {
+        guard !revenueManager.transactions.isEmpty else { return 0 }
+        return revenueManager.totalRevenue / Double(revenueManager.transactions.count)
+    }
+    
+    private var paymentMethodsChart: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Ingresos por Método de Pago")
+                .font(.headline)
+                .foregroundColor(.brandGold)
+            
+            let paymentData = revenueManager.getTransactionsByPaymentMethod()
+            
+            ForEach(Array(paymentData.keys.sorted()), id: \.self) { method in
+                let amount = paymentData[method] ?? 0
+                let percentage = revenueManager.totalRevenue > 0 ? (amount / revenueManager.totalRevenue) : 0
+                
+                VStack(spacing: 4) {
+                    HStack {
+                        Text(method.capitalized)
+                            .font(.subheadline)
+                            .foregroundColor(.brandLight)
+                        
+                        Spacer()
+                        
+                        Text("$\(Int(amount).formatted())")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.brandGold)
+                    }
+                    
+                    ProgressView(value: percentage)
+                        .progressViewStyle(LinearProgressViewStyle(tint: .brandGold))
+                        .background(Color.brandDark)
+                        .cornerRadius(4)
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.brandDark)
+        .cornerRadius(12)
+    }
+    
+    private var transactionsList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Todas las Transacciones")
+                .font(.headline)
+                .foregroundColor(.brandGold)
+            
+            LazyVStack(spacing: 8) {
+                ForEach(revenueManager.transactions) { transaction in
+                    DetailedTransactionRow(transaction: transaction)
+                }
+            }
+        }
+        .padding(16)
+        .background(Color.brandDark)
+        .cornerRadius(12)
+    }
+}
+
+struct EnhancedAdminMembershipsCard: View {
+    @StateObject private var membershipManager = AdminMembershipManager()
+    @StateObject private var revenueManager = RevenueManager.shared
+    @State private var showingRevenueDetails = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Header con estadísticas de ingresos
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("💳 Gestión de Membresías")
+                        .font(.headline)
+                        .foregroundColor(.brandLight)
+                    
+                    Text("Total ingresos: $\(Int(revenueManager.totalRevenue).formatted())")
+                        .font(.caption)
+                        .foregroundColor(.green)
+                }
+                
+                Spacer()
+                
+                // Botón para ver detalles de ingresos
+                Button(action: {
+                    showingRevenueDetails = true
+                }) {
+                    HStack {
+                        Image(systemName: "chart.bar.fill")
+                        Text("Ingresos")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.brandBlack)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.green.opacity(0.8))
+                    .cornerRadius(8)
+                }
+                
+                // Badge con cantidad pendientes
+                let pendingCount = membershipManager.memberships.filter { $0.requiereActivacion }.count
+                if pendingCount > 0 {
+                    Text("\(pendingCount)")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(.brandBlack)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.orange)
+                        .cornerRadius(12)
+                }
+            }
+            
+            if membershipManager.memberships.isEmpty {
+                VStack(spacing: 12) {
+                    Image(systemName: "creditcard.fill")
+                        .font(.system(size: 40))
+                        .foregroundColor(.brandGold.opacity(0.5))
+                    
+                    Text("No hay membresías registradas")
+                        .font(.subheadline)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
+            } else {
+                LazyVStack(spacing: 12) {
+                    ForEach(membershipManager.memberships) { membership in
+                        // Usar la nueva versión con precios personalizados
+                        EnhancedMembershipRow(membership: membership, manager: membershipManager)
+                    }
+                }
+            }
+        }
+        .padding(20)
+        .background(Color.brandDark)
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+        )
+        .onAppear {
+            membershipManager.loadAllMemberships()
+            Task {
+                await revenueManager.loadTransactions()
+            }
+        }
+        .sheet(isPresented: $showingRevenueDetails) {
+            RevenueDetailsSheet()
+        }
+    }
+}
+
+
 // MARK: - Membresía Card para Usuarios
 struct MembresiaCard: View {
     @ObservedObject var miembroManager: MiembroManager
@@ -2813,271 +4227,456 @@ struct MembresiaCard: View {
 
 struct MembershipActivationSheet: View {
     let membership: MembershipData
-    let manager: AdminMembershipManager
-    @Environment(\.dismiss) private var dismiss
-    
-    @State private var selectedDays: Int = 30
-    @State private var customDays: String = "30"
-    @State private var isActivating = false
-    @State private var showingConfirmation = false
-    
-    // Opciones predefinidas de días
-    private let dayOptions = [7, 15, 30, 60, 90, 180, 365]
-    
-    var calculatedEndDate: Date {
-        Calendar.current.date(byAdding: .day, value: selectedDays, to: Date()) ?? Date()
-    }
-    
-    var body: some View {
-        NavigationView {
-            ZStack {
-                Color.brandBlack.ignoresSafeArea()
+        let manager: AdminMembershipManager
+        @Environment(\.dismiss) private var dismiss
+        
+        @State private var selectedDays: Int = 30
+        @State private var customDays: String = "30"
+        @State private var customPrice: String = ""
+        @State private var useCustomPrice: Bool = false
+        @State private var selectedPaymentMethod: String = "efectivo"
+        @State private var notes: String = ""
+        @State private var isActivating = false
+        @State private var showingConfirmation = false
+        
+        @StateObject private var revenueManager = RevenueManager.shared
+        
+        // Opciones predefinidas de días
+        private let dayOptions = [7, 15, 30, 60, 90, 180, 365]
+        
+        // Métodos de pago
+        private let paymentMethods = ["efectivo", "transferencia", "tarjeta", "nequi", "daviplata"]
+        
+        var calculatedEndDate: Date {
+            Calendar.current.date(byAdding: .day, value: selectedDays, to: Date()) ?? Date()
+        }
+        
+        var finalPrice: Double {
+            if useCustomPrice, let price = Double(customPrice), price > 0 {
+                return price
+            }
+            return membership.precio
+        }
+        
+        var body: some View {
+            NavigationView {
+                ZStack {
+                    Color.brandBlack.ignoresSafeArea()
+                    
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            // Header
+                            VStack(spacing: 12) {
+                                Image(systemName: "calendar.badge.plus")
+                                    .font(.system(size: 50))
+                                    .foregroundColor(.brandGold)
+                                
+                                Text("Activar Membresía")
+                                    .font(.title2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.brandGold)
+                                
+                                Text("Configura duración, precio y método de pago")
+                                    .font(.subheadline)
+                                    .foregroundColor(.brandLight.opacity(0.7))
+                                    .multilineTextAlignment(.center)
+                            }
+                            
+                            // Información de la membresía
+                            membershipInfoSection
+                            
+                            // Selección de duración
+                            durationSelectionSection
+                            
+                            // Configuración de precio
+                            pricingSection
+                            
+                            // Método de pago
+                            paymentMethodSection
+                            
+                            // Notas adicionales
+                            notesSection
+                            
+                            // Previsualización
+                            previewSection
+                            
+                            // Botón de activación
+                            activationButton
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 16)
+                    }
+                }
+                .navigationTitle("Activar Membresía")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Cancelar") {
+                            dismiss()
+                        }
+                        .foregroundColor(.brandLight)
+                        .disabled(isActivating)
+                    }
+                }
+                .alert("Confirmar Activación", isPresented: $showingConfirmation) {
+                    Button("Activar", role: .cancel) {
+                        Task {
+                            await activateMembership()
+                        }
+                    }
+                    Button("Cancelar", role: .destructive) { }
+                } message: {
+                    Text("¿Activar membresía por \(selectedDays) días por $\(Int(finalPrice).formatted())?\n\nMétodo: \(selectedPaymentMethod.capitalized)")
+                }
+                .onAppear {
+                    customPrice = "\(Int(membership.precio))"
+                }
+                .preferredColorScheme(.dark)
+            }
+        }
+        
+        // MARK: - Sección de información de membresía
+        private var membershipInfoSection: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Información de la Membresía")
+                    .font(.headline)
+                    .foregroundColor(.brandGold)
                 
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // Header
-                        VStack(spacing: 12) {
-                            Image(systemName: "calendar.badge.plus")
-                                .font(.system(size: 50))
+                VStack(spacing: 8) {
+                    HStack {
+                        Text("Usuario:")
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        Spacer()
+                        Text(membership.email)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.brandLight)
+                    }
+                    
+                    HStack {
+                        Text("Tipo:")
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        Spacer()
+                        Text(membership.tipoMembresia)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.brandGold)
+                    }
+                    
+                    HStack {
+                        Text("Precio Base:")
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        Spacer()
+                        Text("$\(Int(membership.precio).formatted())")
+                            .fontWeight(.bold)
+                            .foregroundColor(.green)
+                    }
+                }
+                .padding(16)
+                .background(Color.brandDark.opacity(0.5))
+                .cornerRadius(12)
+            }
+        }
+        
+        // MARK: - Sección de selección de duración
+        private var durationSelectionSection: some View {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Duración de la Membresía")
+                    .font(.headline)
+                    .foregroundColor(.brandGold)
+                
+                Text("Opciones rápidas:")
+                    .font(.subheadline)
+                    .foregroundColor(.brandLight.opacity(0.8))
+                
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
+                    ForEach(dayOptions, id: \.self) { days in
+                        DayOptionCard(
+                            days: days,
+                            isSelected: selectedDays == days,
+                            action: {
+                                selectedDays = days
+                                customDays = "\(days)"
+                            }
+                        )
+                    }
+                }
+                
+                // Campo personalizado
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("O ingresa días personalizados:")
+                        .font(.subheadline)
+                        .foregroundColor(.brandLight.opacity(0.8))
+                    
+                    TextField("Número de días", text: $customDays)
+                        .keyboardType(.numberPad)
+                        .padding(12)
+                        .background(Color.brandDark)
+                        .foregroundColor(.brandWhite)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
+                        )
+                        .onChange(of: customDays) { newValue in
+                            if let days = Int(newValue), days > 0 {
+                                selectedDays = days
+                            }
+                        }
+                }
+            }
+        }
+        
+        // MARK: - Sección de configuración de precio
+        private var pricingSection: some View {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Configuración de Precio")
+                    .font(.headline)
+                    .foregroundColor(.brandGold)
+                
+                // Toggle para precio personalizado
+                Toggle("Usar precio personalizado", isOn: $useCustomPrice)
+                    .toggleStyle(SwitchToggleStyle(tint: .brandGold))
+                    .foregroundColor(.brandLight)
+                
+                if useCustomPrice {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Precio personalizado:")
+                            .font(.subheadline)
+                            .foregroundColor(.brandLight.opacity(0.8))
+                        
+                        HStack {
+                            Text("$")
+                                .font(.title2)
                                 .foregroundColor(.brandGold)
                             
-                            Text("Activar Membresía")
+                            TextField("0", text: $customPrice)
+                                .keyboardType(.numberPad)
                                 .font(.title2)
+                                .fontWeight(.semibold)
+                        }
+                        .padding(12)
+                        .background(Color.brandDark)
+                        .foregroundColor(.brandWhite)
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
+                        )
+                    }
+                }
+                
+                // Mostrar cálculos
+                VStack(spacing: 8) {
+                    HStack {
+                        Text("Precio total:")
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        Spacer()
+                        Text("$\(Int(finalPrice).formatted())")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(.brandGold)
+                    }
+                    
+                    if useCustomPrice {
+                        let discount = membership.precio - finalPrice
+                        if discount > 0 {
+                            HStack {
+                                Text("Descuento:")
+                                    .foregroundColor(.green.opacity(0.8))
+                                Spacer()
+                                Text("-$\(Int(discount).formatted())")
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.green)
+                            }
+                        } else if discount < 0 {
+                            HStack {
+                                Text("Recargo:")
+                                    .foregroundColor(.orange.opacity(0.8))
+                                Spacer()
+                                Text("+$\(Int(abs(discount)).formatted())")
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.orange)
+                            }
+                        }
+                    }
+                }
+                .padding(12)
+                .background(Color.brandDark.opacity(0.3))
+                .cornerRadius(8)
+            }
+        }
+        
+        // MARK: - Sección de método de pago
+        private var paymentMethodSection: some View {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Método de Pago")
+                    .font(.headline)
+                    .foregroundColor(.brandGold)
+                
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 12) {
+                    ForEach(paymentMethods, id: \.self) { method in
+                        PaymentMethodCard(
+                            method: method,
+                            isSelected: selectedPaymentMethod == method,
+                            action: {
+                                selectedPaymentMethod = method
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        
+        // MARK: - Sección de notas
+        private var notesSection: some View {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Notas adicionales (opcional)")
+                    .font(.subheadline)
+                    .foregroundColor(.brandLight.opacity(0.8))
+                
+                TextField("Agregar comentarios sobre esta activación...", text: $notes, axis: .vertical)
+                    .lineLimit(2...4)
+                    .padding(12)
+                    .background(Color.brandDark)
+                    .foregroundColor(.brandWhite)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
+                    )
+            }
+        }
+        
+        // MARK: - Sección de previsualización
+        private var previewSection: some View {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Resumen de Activación")
+                    .font(.headline)
+                    .foregroundColor(.brandGold)
+                
+                VStack(spacing: 12) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Fecha de Inicio")
+                                .font(.caption)
+                                .foregroundColor(.brandLight.opacity(0.7))
+                            Text(DateFormatter.membershipFormatter.string(from: Date()))
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.brandLight)
+                        }
+                        
+                        Spacer()
+                        
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text("Fecha de Vencimiento")
+                                .font(.caption)
+                                .foregroundColor(.brandLight.opacity(0.7))
+                            Text(DateFormatter.membershipFormatter.string(from: calculatedEndDate))
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.brandLight)
+                        }
+                    }
+                    
+                    Divider().background(Color.brandGold.opacity(0.3))
+                    
+                    VStack(spacing: 8) {
+                        HStack {
+                            Text("Duración:")
+                            Spacer()
+                            Text("\(selectedDays) días")
+                                .fontWeight(.semibold)
+                        }
+                        
+                        HStack {
+                            Text("Método de pago:")
+                            Spacer()
+                            Text(selectedPaymentMethod.capitalized)
+                                .fontWeight(.semibold)
+                        }
+                        
+                        HStack {
+                            Text("Total a cobrar:")
+                            Spacer()
+                            Text("$\(Int(finalPrice).formatted())")
+                                .font(.title3)
                                 .fontWeight(.bold)
                                 .foregroundColor(.brandGold)
-                            
-                            Text("Selecciona la duración de la membresía")
-                                .font(.subheadline)
-                                .foregroundColor(.brandLight.opacity(0.7))
-                                .multilineTextAlignment(.center)
                         }
-                        
-                        // Información de la membresía
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Información de la Membresía")
-                                .font(.headline)
-                                .foregroundColor(.brandGold)
-                            
-                            VStack(spacing: 8) {
-                                HStack {
-                                    Text("Usuario:")
-                                        .foregroundColor(.brandLight.opacity(0.7))
-                                    Spacer()
-                                    Text(membership.email)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.brandLight)
-                                }
-                                
-                                HStack {
-                                    Text("Tipo:")
-                                        .foregroundColor(.brandLight.opacity(0.7))
-                                    Spacer()
-                                    Text(membership.tipoMembresia)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.brandGold)
-                                }
-                                
-                                HStack {
-                                    Text("Precio:")
-                                        .foregroundColor(.brandLight.opacity(0.7))
-                                    Spacer()
-                                    Text("$\(Int(membership.precio).formatted())")
-                                        .fontWeight(.bold)
-                                        .foregroundColor(.green)
-                                }
-                            }
-                            .padding(16)
-                            .background(Color.brandDark.opacity(0.5))
-                            .cornerRadius(12)
-                        }
-                        
-                        // Selección de días predefinidos
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Duración de la Membresía")
-                                .font(.headline)
-                                .foregroundColor(.brandGold)
-                            
-                            Text("Opciones rápidas:")
-                                .font(.subheadline)
-                                .foregroundColor(.brandLight.opacity(0.8))
-                            
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 3), spacing: 12) {
-                                ForEach(dayOptions, id: \.self) { days in
-                                    DayOptionCard(
-                                        days: days,
-                                        isSelected: selectedDays == days,
-                                        action: {
-                                            selectedDays = days
-                                            customDays = "\(days)"
-                                        }
-                                    )
-                                }
-                            }
-                            
-                            // Campo personalizado
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("O ingresa días personalizados:")
-                                    .font(.subheadline)
-                                    .foregroundColor(.brandLight.opacity(0.8))
-                                
-                                TextField("Número de días", text: $customDays)
-                                    .keyboardType(.numberPad)
-                                    .padding(12)
-                                    .background(Color.brandDark)
-                                    .foregroundColor(.brandWhite)
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
-                                    )
-                                    .onChange(of: customDays) { newValue in
-                                        if let days = Int(newValue), days > 0 {
-                                            selectedDays = days
-                                        }
-                                    }
-                            }
-                        }
-                        
-                        // Previsualización de fechas
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Previsualización")
-                                .font(.headline)
-                                .foregroundColor(.brandGold)
-                            
-                            VStack(spacing: 12) {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text("Fecha de Inicio")
-                                            .font(.caption)
-                                            .foregroundColor(.brandLight.opacity(0.7))
-                                        Text(DateFormatter.membershipFormatter.string(from: Date()))
-                                            .font(.subheadline)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.brandLight)
-                                    }
-                                    
-                                    Spacer()
-                                    
-                                    VStack(alignment: .trailing, spacing: 4) {
-                                        Text("Fecha de Vencimiento")
-                                            .font(.caption)
-                                            .foregroundColor(.brandLight.opacity(0.7))
-                                        Text(DateFormatter.membershipFormatter.string(from: calculatedEndDate))
-                                            .font(.subheadline)
-                                            .fontWeight(.semibold)
-                                            .foregroundColor(.brandLight)
-                                    }
-                                }
-                                
-                                // Duración total
-                                HStack {
-                                    Image(systemName: "calendar")
-                                        .foregroundColor(.brandGold)
-                                    Text("Duración: \(selectedDays) días")
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.brandGold)
-                                    Spacer()
-                                }
-                                
-                            }
-                            .padding(16)
-                            .background(Color.brandDark.opacity(0.3))
-                            .cornerRadius(12)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
-                            )
-                        }
-                        
-                        // Botón de activación
-                        Button(action: {
-                            showingConfirmation = true
-                        }) {
-                            HStack {
-                                if isActivating {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .brandBlack))
-                                        .scaleEffect(0.8)
-                                } else {
-                                    Image(systemName: "checkmark.circle.fill")
-                                }
-                                
-                                Text(isActivating ? "Activando..." : "Activar Membresía")
-                                    .fontWeight(.semibold)
-                            }
-                            .foregroundColor(.brandBlack)
-                            .padding(.vertical, 16)
-                            .frame(maxWidth: .infinity)
-                            .background(
-                                LinearGradient(
-                                    colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                            .cornerRadius(12)
-                            .disabled(isActivating || selectedDays <= 0)
-                        }
-                        .scaleEffect(isActivating ? 0.98 : 1.0)
-                        .animation(.spring(response: 0.3), value: isActivating)
                     }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
-                }
-            }
-            .navigationTitle("Activar Membresía")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("Cancelar") {
-                        dismiss()
-                    }
+                    .font(.subheadline)
                     .foregroundColor(.brandLight)
-                    .disabled(isActivating)
                 }
+                .padding(16)
+                .background(Color.brandDark.opacity(0.3))
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+                )
             }
-            .alert("Confirmar Activación", isPresented: $showingConfirmation) {
-                Button("Activar", role: .cancel) {
-                    Task {
-                        await activateMembership()
+        }
+        
+        // MARK: - Botón de activación
+        private var activationButton: some View {
+            Button(action: {
+                showingConfirmation = true
+            }) {
+                HStack {
+                    if isActivating {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: .brandBlack))
+                            .scaleEffect(0.8)
+                    } else {
+                        Image(systemName: "checkmark.circle.fill")
                     }
+                    
+                    Text(isActivating ? "Procesando..." : "Activar Membresía")
+                        .fontWeight(.semibold)
                 }
-                Button("Cancelar", role: .destructive) { }
-            } message: {
-                Text("¿Activar membresía por \(selectedDays) días?\n\nInicio: \(DateFormatter.membershipFormatter.string(from: Date()))\nVencimiento: \(DateFormatter.membershipFormatter.string(from: calculatedEndDate))")
+                .foregroundColor(.brandBlack)
+                .padding(.vertical, 16)
+                .frame(maxWidth: .infinity)
+                .background(
+                    LinearGradient(
+                        colors: [Color.brandGold, Color.brandGold.opacity(0.8)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .cornerRadius(12)
+                .disabled(isActivating || selectedDays <= 0 || (useCustomPrice && Double(customPrice) == nil))
             }
-            .preferredColorScheme(.dark)
+            .scaleEffect(isActivating ? 0.98 : 1.0)
+            .animation(.spring(response: 0.3), value: isActivating)
         }
-    }
-    
-    private func getDurationDescription(days: Int) -> String {
-        switch days {
-        case 1..<7: return "Corto plazo"
-        case 7..<30: return "Semanal"
-        case 30..<60: return "Mensual"
-        case 60..<180: return "Trimestral"
-        case 180..<365: return "Semestral"
-        case 365...: return "Anual"
-        default: return "Personalizado"
+        
+        // MARK: - Función de activación con registro de ingresos
+        private func activateMembership() async {
+            isActivating = true
+            
+            // ✅ OBTENER DATOS DEL ADMIN ACTUAL - IMPORTANTE: Aquí debes usar datos reales
+            let adminUserId = Auth.auth().currentUser?.uid ?? "unknown_admin"
+            let adminUserName = "Admin Usuario" // Aquí podrías obtener el nombre real del admin logueado
+            
+            // Usar la nueva función con precios personalizados
+            await manager.activateMembershipWithCustomPriceAndHistory(
+                membershipId: membership.id,
+                userEmail: membership.email,
+                days: selectedDays,
+                customPrice: useCustomPrice ? Double(customPrice) : nil,
+                paymentMethod: selectedPaymentMethod,
+                notes: notes.isEmpty ? nil : notes,
+                adminUserId: adminUserId,
+                adminUserName: adminUserName
+            )
+            
+            // Delay para mejor UX
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+            
+            isActivating = false
+            dismiss()
         }
-    }
-    
-    private func activateMembership() async {
-        isActivating = true
-        
-        await manager.activateMembershipWithCustomDays(
-            membershipId: membership.id,
-            userEmail: membership.email,
-            days: selectedDays
-        )
-        
-        // Delay para mejor UX
-        try? await Task.sleep(nanoseconds: 1_000_000_000)
-        
-        isActivating = false
-        dismiss()
-    }
 }
 
 struct DayOptionCard: View {
@@ -3142,8 +4741,9 @@ struct DayOptionCard: View {
         }
     }
 }
+// MARK: - UserMembershipCard COMPLETO Y CORREGIDO
 
-// MARK: - UserMembershipCard con listener en tiempo real
+// MARK: - UserMembershipCard COMPLETO Y CORREGIDO
 
 struct UserMembershipCard: View {
     let authManager: AuthManager
@@ -3151,6 +4751,7 @@ struct UserMembershipCard: View {
     @State private var isLoading = true
     @State private var membershipListener: ListenerRegistration?
     @State private var showingPaymentAlert = false
+    @State private var debugInfo: String = "" // Para debugging
     
     private var isPaymentDue: Bool {
         guard let membership = userMembership,
@@ -3158,318 +4759,220 @@ struct UserMembershipCard: View {
         return days <= 1 && membership.activa
     }
     
-    private let db = Firestore.firestore()
+    // ✅ VERIFICACIÓN: Verificar si el usuario es administrador
+    // Removemos esta propiedad por ahora ya que no la estamos usando en el código actual
+    // private var isUserAdmin: Bool { ... }
     
-    @ViewBuilder
-       private func enhancedActiveMembershipView(membership: MembershipData) -> some View {
-           VStack(spacing: 12) {
-               // Información de duración y activación
-               if let duracion = membership.duracionDias,
-                  let fechaActivacion = membership.fechaActivacion {
-                   
-                   HStack {
-                       VStack(alignment: .leading, spacing: 4) {
-                           Text("Duración Original")
-                               .font(.caption)
-                               .foregroundColor(.brandLight.opacity(0.7))
-                           Text(membership.durationText)
-                               .font(.subheadline)
-                               .fontWeight(.semibold)
-                               .foregroundColor(.brandGold)
-                       }
-                       
-                       Spacer()
-                       
-                       VStack(alignment: .trailing, spacing: 4) {
-                           Text("Activada el")
-                               .font(.caption)
-                               .foregroundColor(.brandLight.opacity(0.7))
-                           Text(DateFormatter.membershipFormatter.string(from: fechaActivacion))
-                               .font(.subheadline)
-                               .fontWeight(.semibold)
-                               .foregroundColor(.brandLight)
-                       }
-                   }
-                   .padding(12)
-                   .background(Color.brandGold.opacity(0.1))
-                   .cornerRadius(8)
-               }
-               
-               // Fechas
-               HStack {
-                   VStack(alignment: .leading, spacing: 4) {
-                       Text("Fecha de Inicio")
-                           .font(.caption)
-                           .foregroundColor(.brandLight.opacity(0.7))
-                       Text(membership.fechaInicio)
-                           .font(.subheadline)
-                           .fontWeight(.semibold)
-                           .foregroundColor(.brandLight)
-                   }
-                   
-                   Spacer()
-                   
-                   VStack(alignment: .trailing, spacing: 4) {
-                       Text("Vencimiento")
-                           .font(.caption)
-                           .foregroundColor(.brandLight.opacity(0.7))
-                       Text(membership.fechaVencimiento)
-                           .font(.subheadline)
-                           .fontWeight(.semibold)
-                           .foregroundColor(.brandLight)
-                   }
-               }
-               
-               // Precio y días restantes
-               HStack {
-                   VStack(alignment: .leading, spacing: 4) {
-                       Text("Precio Mensual")
-                           .font(.caption)
-                           .foregroundColor(.brandLight.opacity(0.7))
-                       Text("$\(Int(membership.precio).formatted())")
-                           .font(.title3)
-                           .fontWeight(.bold)
-                           .foregroundColor(.brandGold)
-                   }
-                   
-                   Spacer()
-                   
-                   if let diasRestantes = membership.diasRestantes {
-                       VStack(alignment: .trailing, spacing: 4) {
-                           Text("Días Restantes")
-                               .font(.caption)
-                               .foregroundColor(.brandLight.opacity(0.7))
-                           
-                           HStack(spacing: 4) {
-                               if membership.isExpiringSoon {
-                                   Image(systemName: "exclamationmark.triangle.fill")
-                                       .foregroundColor(.orange)
-                                       .font(.caption)
-                               } else if membership.isExpiredToday {
-                                   Image(systemName: "xmark.circle.fill")
-                                       .foregroundColor(.red)
-                                       .font(.caption)
-                               }
-                               
-                               Text("\(max(0, diasRestantes))")
-                                   .font(.title3)
-                                   .fontWeight(.bold)
-                                   .foregroundColor(
-                                       diasRestantes <= 0 ? .red :
-                                       diasRestantes <= 3 ? .orange :
-                                       diasRestantes <= 7 ? .yellow : .brandGold
-                                   )
-                           }
-                       }
-                   }
-               }
-               
-               // Barra de progreso mejorada
-               if let diasRestantes = membership.diasRestantes,
-                  let duracionOriginal = membership.duracionDias {
-                   
-                   let diasTranscurridos = duracionOriginal - diasRestantes
-                   let progreso = max(0, min(1, Double(diasTranscurridos) / Double(duracionOriginal)))
-                   
-                   VStack(spacing: 8) {
-                       HStack {
-                           Text("Progreso de Membresía")
-                               .font(.caption)
-                               .foregroundColor(.brandLight.opacity(0.7))
-                           Spacer()
-                           Text("\(Int(progreso * 100))% completado")
-                               .font(.caption)
-                               .fontWeight(.semibold)
-                               .foregroundColor(.brandGold)
-                       }
-                       
-                       ProgressView(value: progreso)
-                           .progressViewStyle(LinearProgressViewStyle(
-                               tint: diasRestantes <= 7 ? .orange : .brandGold
-                           ))
-                           .background(Color.brandLight.opacity(0.2))
-                           .cornerRadius(4)
-                       
-                       HStack {
-                           Text("Día \(diasTranscurridos) de \(duracionOriginal)")
-                               .font(.caption2)
-                               .foregroundColor(.brandLight.opacity(0.6))
-                           Spacer()
-                           if diasRestantes > 0 {
-                               Text("\(diasRestantes) días restantes")
-                                   .font(.caption2)
-                                   .foregroundColor(.brandLight.opacity(0.6))
-                           } else {
-                               Text("Expirada")
-                                   .font(.caption2)
-                                   .foregroundColor(.red)
-                           }
-                       }
-                   }
-               }
-               
-               // Botones de acción
-               if let diasRestantes = membership.diasRestantes {
-                   if diasRestantes <= 0 {
-                       // Membresía expirada
-                       Button(action: { makePhoneCall() }) {
-                           HStack {
-                               Image(systemName: "arrow.clockwise")
-                               Text("Renovar Membresía")
-                                   .fontWeight(.semibold)
-                           }
-                           .foregroundColor(.brandWhite)
-                           .padding(.vertical, 12)
-                           .frame(maxWidth: .infinity)
-                           .background(Color.red.opacity(0.8))
-                           .cornerRadius(8)
-                       }
-                   } else if diasRestantes <= 15 {
-                       // Por vencer pronto
-                       Button(action: { makePhoneCall() }) {
-                           HStack {
-                               Image(systemName: "phone.fill")
-                               Text("Contactar para Renovar")
-                                   .fontWeight(.semibold)
-                           }
-                           .foregroundColor(.brandBlack)
-                           .padding(.vertical, 10)
-                           .frame(maxWidth: .infinity)
-                           .background(Color.orange.opacity(0.8))
-                           .cornerRadius(8)
-                       }
-                   }
-               }
-           }
-       }
+    private let db = Firestore.firestore()
     
     var body: some View {
         VStack(spacing: 16) {
-            if isPaymentDue {
-                HStack {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                    
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("¡Pago Pendiente!")
-                            .font(.subheadline)
-                            .fontWeight(.bold)
-                            .foregroundColor(.orange)
-                        
-                        Text("Tu membresía vence pronto. Renueva para continuar.")
-                            .font(.caption)
-                            .foregroundColor(.brandLight.opacity(0.8))
-                    }
-                }
-                .padding(12)
-                .background(Color.orange.opacity(0.1))
-                .cornerRadius(12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.orange.opacity(0.3), lineWidth: 1)
-                )
-                .animation(.spring(response: 0.5), value: isPaymentDue)
-            }
-            
-            // Header
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("💳 Mi Membresía")
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.brandGold)
-                    
-                    if isLoading {
-                        Text("Cargando...")
-                            .font(.subheadline)
-                            .foregroundColor(.brandLight.opacity(0.7))
-                    } else if let membership = userMembership {
-                        Text(membership.tipoMembresia)
-                            .font(.subheadline)
-                            .foregroundColor(.brandLight)
-                    } else {
-                        Text("Sin membresía registrada")
-                            .font(.subheadline)
-                            .foregroundColor(.brandLight.opacity(0.7))
-                    }
-                }
-                
-                Spacer()
-                
-                if let membership = userMembership {
-                    VStack(spacing: 4) {
-                        Text("Estado")
-                            .font(.caption2)
-                            .foregroundColor(.brandLight.opacity(0.7))
-                        
-                        // ✅ CORREGIDO: Animación para cambios de estado
-                        Text(membership.estadoDescripcion)
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(
-                                membership.activa ?
-                                Color.green.opacity(0.2) : Color.orange.opacity(0.2)
-                            )
-                            .foregroundColor(
-                                membership.activa ?
-                                .green : .orange
-                            )
-                            .cornerRadius(8)
-                            .animation(.spring(response: 0.5), value: membership.activa)
-                            .animation(.spring(response: 0.5), value: membership.estadoDescripcion)
-                    }
-                }
-            }
-            
-            if !isLoading {
-                if let membership = userMembership {
-                    if membership.activa {
-                        // Membresía activa - mostrar información completa
-                        activeMembershipView(membership: membership)
-                            .transition(.asymmetric(
-                                insertion: .move(edge: .leading).combined(with: .opacity),
-                                removal: .move(edge: .trailing).combined(with: .opacity)
-                            ))
-                    } else {
-                        // Membresía inactiva - mostrar estado pendiente
-                        inactiveMembershipView(membership: membership)
-                            .transition(.asymmetric(
-                                insertion: .move(edge: .trailing).combined(with: .opacity),
-                                removal: .move(edge: .leading).combined(with: .opacity)
-                            ))
-                    }
-                } else {
-                    // Sin membresía
-                    noMembershipView()
-                        .transition(.opacity)
-                }
-            }
+            paymentDueAlert
+            headerSection
+            contentSection
         }
         .padding(20)
-        .background(
-            LinearGradient(
-                colors: [Color.brandDark, Color.brandDark.opacity(0.8)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
+        .background(backgroundGradient)
         .cornerRadius(16)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
-        )
+        .overlay(borderOverlay)
         .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
         .onAppear {
             setupRealtimeMembershipListener()
         }
         .onDisappear {
-            // ✅ Limpiar listener cuando la vista desaparece
-            membershipListener?.remove()
+            cleanup()
         }
         .animation(.spring(response: 0.6, dampingFraction: 0.8), value: userMembership?.activa)
         .animation(.spring(response: 0.6, dampingFraction: 0.8), value: userMembership?.estadoDescripcion)
+    }
+    
+    // MARK: - Computed Properties
+    private var backgroundGradient: some View {
+        LinearGradient(
+            colors: [Color.brandDark, Color.brandDark.opacity(0.8)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+    
+    private var borderOverlay: some View {
+        RoundedRectangle(cornerRadius: 16)
+            .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+    }
+    
+    // MARK: - Debug Section
+    @ViewBuilder
+    private var debugSection: some View {
+        if !debugInfo.isEmpty {
+            Text(debugInfo)
+                .font(.caption2)
+                .foregroundColor(.yellow)
+                .padding(4)
+                .background(Color.black.opacity(0.7))
+                .cornerRadius(4)
+        }
+        
+        VStack(spacing: 8) {
+            Button("🔍 DEBUG MEMBERSHIP DATA") {
+                Task {
+                    await debugMembershipData()
+                }
+            }
+            .foregroundColor(.yellow)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.black.opacity(0.7))
+            .cornerRadius(8)
+            .font(.caption)
+            
+            Button("🔄 FORCE REFRESH LISTENER") {
+                Task { @MainActor in
+                    cleanup()
+                    setupRealtimeMembershipListener()
+                }
+            }
+            .foregroundColor(.orange)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.black.opacity(0.7))
+            .cornerRadius(8)
+            .font(.caption)
+        }
+    }
+    
+    // MARK: - Payment Due Alert
+    @ViewBuilder
+    private var paymentDueAlert: some View {
+        if isPaymentDue {
+            HStack {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.orange)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("¡Pago Pendiente!")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.orange)
+                    
+                    Text("Tu membresía vence pronto. Renueva para continuar.")
+                        .font(.caption)
+                        .foregroundColor(.brandLight.opacity(0.8))
+                }
+            }
+            .padding(12)
+            .background(Color.orange.opacity(0.1))
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+            )
+            .animation(.spring(response: 0.5), value: isPaymentDue)
+        }
+    }
+    
+    // MARK: - Header Section
+    private var headerSection: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("💳 Mi Membresía")
+                    .font(.headline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.brandGold)
+                
+                headerSubtitle
+            }
+            
+            Spacer()
+            
+            if let membership = userMembership {
+                membershipStatusBadge(membership)
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var headerSubtitle: some View {
+        if isLoading {
+            Text("Cargando...")
+                .font(.subheadline)
+                .foregroundColor(.brandLight.opacity(0.7))
+        } else if let membership = userMembership {
+            Text(membership.tipoMembresia)
+                .font(.subheadline)
+                .foregroundColor(.brandLight)
+        } else {
+            Text("Sin membresía registrada")
+                .font(.subheadline)
+                .foregroundColor(.brandLight.opacity(0.7))
+        }
+    }
+    
+    private func membershipStatusBadge(_ membership: MembershipData) -> some View {
+        VStack(spacing: 4) {
+            Text("Estado")
+                .font(.caption2)
+                .foregroundColor(.brandLight.opacity(0.7))
+            
+            Text(membership.estadoDescripcion)
+                .font(.caption)
+                .fontWeight(.semibold)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(
+                    membership.activa ?
+                    Color.green.opacity(0.2) : Color.orange.opacity(0.2)
+                )
+                .foregroundColor(
+                    membership.activa ?
+                    .green : .orange
+                )
+                .cornerRadius(8)
+                .animation(.spring(response: 0.5), value: membership.activa)
+                .animation(.spring(response: 0.5), value: membership.estadoDescripcion)
+        }
+    }
+    
+    // MARK: - Content Section
+    @ViewBuilder
+    private var contentSection: some View {
+        if !isLoading {
+            let _ = print("🎨 RENDERIZANDO UI - isLoading = false")
+            let _ = print("🎨 userMembership existe: \(userMembership != nil)")
+            
+            if let membership = userMembership {
+                let _ = print("🎨 userMembership.activa: \(membership.activa)")
+                let _ = print("🎨 userMembership.estadoDescripcion: \(membership.estadoDescripcion)")
+                
+                membershipContentView(membership)
+            } else {
+                let _ = print("🎨 ❌ MOSTRANDO VISTA SIN MEMBRESÍA")
+                noMembershipView()
+                    .transition(.opacity)
+            }
+        } else {
+            let _ = print("🎨 ⏳ MOSTRANDO LOADING - isLoading = true")
+            ProgressView("Cargando membresía...")
+                .foregroundColor(.brandGold)
+        }
+    }
+    
+    @ViewBuilder
+    private func membershipContentView(_ membership: MembershipData) -> some View {
+        if membership.activa {
+            let _ = print("🎨 ✅ MOSTRANDO VISTA DE MEMBRESÍA ACTIVA")
+            activeMembershipView(membership: membership)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .leading).combined(with: .opacity),
+                    removal: .move(edge: .trailing).combined(with: .opacity)
+                ))
+        } else {
+            let _ = print("🎨 ⚠️ MOSTRANDO VISTA DE MEMBRESÍA INACTIVA")
+            inactiveMembershipView(membership: membership)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+        }
     }
     
     private func makePhoneCall() {
@@ -3496,6 +4999,38 @@ struct UserMembershipCard: View {
     @ViewBuilder
     private func activeMembershipView(membership: MembershipData) -> some View {
         VStack(spacing: 12) {
+            // Información de duración y activación (si está disponible)
+            if let duracion = membership.duracionDias,
+               let fechaActivacion = membership.fechaActivacion {
+                
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Duración Original")
+                            .font(.caption)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        Text(membership.durationText)
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.brandGold)
+                    }
+                    
+                    Spacer()
+                    
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("Activada el")
+                            .font(.caption)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        Text(DateFormatter.membershipFormatter.string(from: fechaActivacion))
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.brandLight)
+                    }
+                }
+                .padding(12)
+                .background(Color.brandGold.opacity(0.1))
+                .cornerRadius(8)
+            }
+            
             // Fechas
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
@@ -3524,13 +5059,21 @@ struct UserMembershipCard: View {
             // Precio y días restantes
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Precio Mensual")
+                    Text("Precio Final")
                         .font(.caption)
                         .foregroundColor(.brandLight.opacity(0.7))
-                    Text("$\(Int(membership.precio).formatted())")
-                        .font(.title3)
-                        .fontWeight(.bold)
-                        .foregroundColor(.brandGold)
+                    
+                    if let precioFinal = membership.precioFinal {
+                        Text("$\(Int(precioFinal).formatted())")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(.brandGold)
+                    } else {
+                        Text("$\(Int(membership.precio).formatted())")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .foregroundColor(.brandGold)
+                    }
                 }
                 
                 Spacer()
@@ -3542,28 +5085,35 @@ struct UserMembershipCard: View {
                             .foregroundColor(.brandLight.opacity(0.7))
                         
                         HStack(spacing: 4) {
-                            if diasRestantes <= 7 {
+                            if diasRestantes <= 0 {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.red)
+                                    .font(.caption)
+                            } else if diasRestantes <= 7 {
                                 Image(systemName: "exclamationmark.triangle.fill")
                                     .foregroundColor(.orange)
                                     .font(.caption)
                             }
                             
-                            Text("\(diasRestantes)")
+                            Text("\(max(0, diasRestantes))")
                                 .font(.title3)
                                 .fontWeight(.bold)
                                 .foregroundColor(
-                                    diasRestantes <= 7 ? .orange :
-                                    diasRestantes <= 3 ? .red : .brandGold
+                                    diasRestantes <= 0 ? .red :
+                                    diasRestantes <= 3 ? .orange :
+                                    diasRestantes <= 7 ? .yellow : .brandGold
                                 )
                         }
                     }
                 }
             }
             
-            // Barra de progreso
-            if let diasRestantes = membership.diasRestantes {
-                let totalDias = 30 // Asumiendo membresía mensual
-                let progreso = max(0, min(1, Double(totalDias - diasRestantes) / Double(totalDias)))
+            // Barra de progreso mejorada
+            if let diasRestantes = membership.diasRestantes,
+               let duracionOriginal = membership.duracionDias {
+                
+                let diasTranscurridos = max(0, duracionOriginal - diasRestantes)
+                let progreso = max(0, min(1, Double(diasTranscurridos) / Double(duracionOriginal)))
                 
                 VStack(spacing: 8) {
                     HStack {
@@ -3571,49 +5121,68 @@ struct UserMembershipCard: View {
                             .font(.caption)
                             .foregroundColor(.brandLight.opacity(0.7))
                         Spacer()
-                        Text("\(Int(progreso * 100))%")
+                        Text("\(Int(progreso * 100))% completado")
                             .font(.caption)
                             .fontWeight(.semibold)
                             .foregroundColor(.brandGold)
                     }
                     
                     ProgressView(value: progreso)
-                        .progressViewStyle(LinearProgressViewStyle(tint: .brandGold))
+                        .progressViewStyle(LinearProgressViewStyle(
+                            tint: diasRestantes <= 7 ? .orange : .brandGold
+                        ))
                         .background(Color.brandLight.opacity(0.2))
                         .cornerRadius(4)
-                }
-            }
-            
-            // Botón de renovación si está por vencer
-            if let diasRestantes = membership.diasRestantes, diasRestantes <= 15 {
-                Button(action: {
-                    makePhoneCall()
-                }) {
+                    
                     HStack {
-                        Image(systemName: "phone.fill")
-                        Text("Contactar Gimnasio")
-                            .fontWeight(.semibold)
+                        Text("Día \(diasTranscurridos) de \(duracionOriginal)")
+                            .font(.caption2)
+                            .foregroundColor(.brandLight.opacity(0.6))
+                        Spacer()
+                        if diasRestantes > 0 {
+                            Text("\(diasRestantes) días restantes")
+                                .font(.caption2)
+                                .foregroundColor(.brandLight.opacity(0.6))
+                        } else {
+                            Text("Expirada")
+                                .font(.caption2)
+                                .foregroundColor(.red)
+                        }
                     }
-                    .foregroundColor(.brandBlack)
-                    .padding(.vertical, 10)
-                    .frame(maxWidth: .infinity)
-                    .background(Color.orange.opacity(0.8))
-                    .cornerRadius(8)
                 }
             }
             
-            // Mensaje de celebración para membresía recién activada
-            if membership.requiereActivacion == false {
-                HStack {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Text("¡Membresía activada exitosamente!")
-                        .font(.caption)
-                        .foregroundColor(.green)
-                        .fontWeight(.semibold)
+            // Botones de acción
+            if let diasRestantes = membership.diasRestantes {
+                if diasRestantes <= 0 {
+                    // Membresía expirada
+                    Button(action: { makePhoneCall() }) {
+                        HStack {
+                            Image(systemName: "arrow.clockwise")
+                            Text("Renovar Membresía")
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundColor(.brandWhite)
+                        .padding(.vertical, 12)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.red.opacity(0.8))
+                        .cornerRadius(8)
+                    }
+                } else if diasRestantes <= 15 {
+                    // Por vencer pronto
+                    Button(action: { makePhoneCall() }) {
+                        HStack {
+                            Image(systemName: "phone.fill")
+                            Text("Contactar para Renovar")
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundColor(.brandBlack)
+                        .padding(.vertical, 10)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.orange.opacity(0.8))
+                        .cornerRadius(8)
+                    }
                 }
-                .padding(.vertical, 8)
-                .transition(.scale.combined(with: .opacity))
             }
         }
     }
@@ -3708,60 +5277,322 @@ struct UserMembershipCard: View {
         .padding(.vertical, 8)
     }
     
-    // MARK: - ✅ FUNCIÓN PRINCIPAL CORREGIDA: Listener en tiempo real
+    // MARK: - ✅ SOLUCIÓN AL PROBLEMA DE TIMING
+
+    // 1. AGREGAR ESTA FUNCIÓN AL UserMembershipCard
+
     private func setupRealtimeMembershipListener() {
         Task { @MainActor in
-            guard let userData = authManager.currentUserData else {
+            print("🚀 INICIANDO CONFIGURACIÓN DE LISTENER")
+            
+            // Limpiar listener anterior si existe
+            cleanup()
+            
+            // ✅ ESTRATEGIA DE RETRY CON DELAY
+            var retryCount = 0
+            let maxRetries = 5
+            var finalUserData: UserData? = nil // ✅ Declarar variable aquí
+            
+            while retryCount < maxRetries {
+                print("🔄 Intento \(retryCount + 1) de \(maxRetries)")
+                
+                // Verificar estado de autenticación
+                guard let firebaseUser = Auth.auth().currentUser else {
+                    print("❌ No hay usuario autenticado")
+                    debugInfo = "❌ Usuario no autenticado"
+                    isLoading = false
+                    return
+                }
+                
+                print("✅ Firebase User: \(firebaseUser.email ?? "sin email")")
+                
+                // Intentar obtener userData del AuthManager
+                var currentUserData = authManager.currentUserData
+                
+                // Si no hay userData, intentar cargar desde Firestore
+                if currentUserData == nil {
+                    print("🔄 Cargando datos desde Firestore...")
+                    
+                    do {
+                        let document = try await db.collection("usuarios").document(firebaseUser.uid).getDocument()
+                        
+                        if document.exists, let data = document.data() {
+                            print("✅ Documento encontrado en Firestore")
+                            
+                            currentUserData = UserData(
+                                uid: firebaseUser.uid,
+                                email: data["email"] as? String ?? firebaseUser.email ?? "",
+                                displayName: data["displayName"] as? String ?? "",
+                                idTipoDocumento: data["idTipoDocumento"] as? Int ?? 1,
+                                numeroDocumento: data["numeroDocumento"] as? String ?? "",
+                                nombre: data["nombre"] as? String ?? "",
+                                apellido: data["apellido"] as? String ?? "",
+                                telefono: data["telefono"] as? String ?? "",
+                                fechaNacimiento: (data["fechaNacimiento"] as? Timestamp)?.dateValue() ?? Date(),
+                                direccion: data["direccion"] as? String ?? "",
+                                activo: data["activo"] as? Bool ?? true,
+                                idGenero: data["idGenero"] as? Int ?? 1,
+                                edad: data["edad"] as? String,
+                                peso: data["peso"] as? String,
+                                estatura: data["estatura"] as? String,
+                                fechaCreacion: (data["fechaCreacion"] as? Timestamp)?.dateValue() ?? Date(),
+                                rol: data["rol"] as? String ?? "usuario"
+                            )
+                            
+                            // Actualizar AuthManager
+                            authManager.currentUserData = currentUserData
+                            finalUserData = currentUserData // ✅ Asignar a la variable final
+                            print("✅ Datos asignados al AuthManager")
+                            break // Salir del loop de retry
+                            
+                        } else {
+                            print("⚠️ Documento no existe todavía, esperando...")
+                            retryCount += 1
+                            
+                            if retryCount < maxRetries {
+                                debugInfo = "⏳ Esperando creación de usuario... (\(retryCount)/\(maxRetries))"
+                                // Esperar 2 segundos antes del siguiente intento
+                                try await Task.sleep(nanoseconds: 2_000_000_000)
+                            } else {
+                                print("❌ Máximo número de reintentos alcanzado")
+                                debugInfo = "❌ Error: Usuario no encontrado después de \(maxRetries) intentos"
+                                isLoading = false
+                                return
+                            }
+                        }
+                        
+                    } catch {
+                        print("❌ Error cargando desde Firestore: \(error.localizedDescription)")
+                        retryCount += 1
+                        
+                        if retryCount < maxRetries {
+                            debugInfo = "⚠️ Error, reintentando... (\(retryCount)/\(maxRetries))"
+                            try await Task.sleep(nanoseconds: 2_000_000_000)
+                        } else {
+                            debugInfo = "❌ Error persistente: \(error.localizedDescription)"
+                            isLoading = false
+                            return
+                        }
+                    }
+                } else {
+                    print("✅ UserData obtenido del AuthManager")
+                    finalUserData = currentUserData // ✅ Asignar a la variable final
+                    break // Salir del loop de retry
+                }
+            }
+            
+            // ✅ VERIFICAR QUE TENEMOS userData VÁLIDO
+            guard let userData = finalUserData else { // ✅ Usar la variable final
+                print("❌ No se pudo obtener userData después de todos los intentos")
+                debugInfo = "❌ No se pudieron cargar datos del usuario"
                 isLoading = false
                 return
             }
 
-            print("🔄 Configurando listener para userUID: \(userData.uid)")
+            // ✅ MOSTRAR DATOS OBTENIDOS
+            print("🔄 CONFIGURANDO LISTENER PARA MEMBRESÍA:")
+            print("====================================")
+            print("👤 Usuario: \(userData.nombre) \(userData.apellido)")
+            print("📧 Email: \(userData.email)")
+            print("🆔 UID: \(userData.uid)")
+            print("🏷️ Rol: \(userData.rol)")
+            print("✅ Activo: \(userData.activo)")
+            print("====================================")
+            
+            debugInfo = "✅ Usuario: \(userData.email)"
 
-            // Ya tenemos userData en MainActor, ahora configuramos el listener
-            membershipListener = db.collection("membresias")
-                .whereField("userUID", isEqualTo: userData.uid)
-                .addSnapshotListener { snapshot, error in
+            // ✅ CONFIGURAR LISTENER
+            setupListenerByUserUID(userData: userData)
+        }
+    }
+
+    // 2. AGREGAR ESTA FUNCIÓN AUXILIAR PARA RETRY DE MEMBRESÍAS
+
+    private func setupListenerByUserUID(userData: UserData) {
+        print("🔄 Configurando listener por userUID: \(userData.uid)")
+        
+        membershipListener = db.collection("membresias")
+            .whereField("userUID", isEqualTo: userData.uid)
+            .addSnapshotListener { [self] snapshot, error in
+                DispatchQueue.main.async {
                     if let error = error {
-                        print("❌ Error en listener de membresía: \(error.localizedDescription)")
+                        print("❌ Error en listener por userUID: \(error.localizedDescription)")
+                        debugInfo = "❌ Error UID: \(error.localizedDescription)"
+                        
+                        // Si hay error, intentar por email como fallback
+                        setupListenerByEmail(userData: userData)
                         return
                     }
 
                     guard let snapshot = snapshot else {
-                        print("⚠️ Snapshot de membresía vacío")
+                        print("⚠️ Snapshot vacío por userUID")
+                        setupListenerByEmail(userData: userData)
                         return
                     }
 
-                    print("📥 Snapshot recibido con \(snapshot.documents.count) documentos")
-
-                    DispatchQueue.main.async {
-                        if let doc = snapshot.documents.first {
-                            let previousMembership = self.userMembership
-                            let newMembership = MembershipData(from: doc)
-
-                            let wasInactive = previousMembership?.activa == false
-                            let isNowActive = newMembership.activa == true
-                            
-                            print("📄 Datos Firestore: \(doc.data())")
-                            print("✅ Valor 'activa' en modelo: \(newMembership.activa)")
-
-                            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                                self.userMembership = newMembership
-                            }
-
-                            if wasInactive && isNowActive {
-                                self.showActivationCelebration()
-                            }
-                        } else {
-                            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
-                                self.userMembership = nil
+                    print("📥 LISTENER POR userUID - Docs: \(snapshot.documents.count)")
+                    
+                    if snapshot.documents.isEmpty {
+                        print("⚠️ No se encontraron membresías por userUID")
+                        print("🔄 Esperando a que se cree la membresía...")
+                        debugInfo = "⏳ Esperando creación de membresía..."
+                        
+                        // Intentar por email como fallback
+                        setupListenerByEmail(userData: userData)
+                        return
+                    }
+                    
+                    // ✅ Procesar membresía encontrada
+                    processMembershipSnapshot(snapshot: snapshot, searchMethod: "userUID")
+                }
+            }
+    }
+    
+    private func setupListenerByEmail(userData: UserData) {
+        print("🔄 Configurando listener por email: \(userData.email)")
+        
+        // Limpiar listener anterior si existe
+        membershipListener?.remove()
+        
+        membershipListener = db.collection("membresias")
+            .whereField("email", isEqualTo: userData.email)
+            .addSnapshotListener { [self] snapshot, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("❌ Error en listener por email: \(error.localizedDescription)")
+                        debugInfo = "❌ Error email: \(error.localizedDescription)"
+                        isLoading = false
+                        return
+                    }
+                    
+                    guard let snapshot = snapshot else {
+                        print("⚠️ Snapshot vacío por email")
+                        debugInfo = "⚠️ Sin membresías"
+                        userMembership = nil
+                        isLoading = false
+                        return
+                    }
+                    
+                    print("📥 LISTENER POR EMAIL - Docs: \(snapshot.documents.count)")
+                    
+                    if snapshot.documents.isEmpty {
+                        print("⚠️ No se encontraron membresías por email")
+                        debugInfo = "⏳ Sin membresía registrada"
+                        userMembership = nil
+                        isLoading = false
+                        return
+                    }
+                    
+                    // ✅ Procesar membresía encontrada
+                    processMembershipSnapshot(snapshot: snapshot, searchMethod: "email")
+                    
+                    // ✅ Corregir userUID si es necesario
+                    if let doc = snapshot.documents.first {
+                        let data = doc.data()
+                        let currentUserUID = data["userUID"] as? String ?? ""
+                        
+                        if currentUserUID != userData.uid {
+                            print("🔧 CORRIGIENDO userUID automáticamente")
+                            Task {
+                                do {
+                                    try await doc.reference.updateData([
+                                        "userUID": userData.uid,
+                                        "fechaCorreccionUID": Timestamp(date: Date())
+                                    ])
+                                    print("✅ UserUID corregido automáticamente")
+                                } catch {
+                                    print("❌ Error corrigiendo userUID: \(error.localizedDescription)")
+                                }
                             }
                         }
-
-                        self.isLoading = false
                     }
                 }
+            }
+    }
+    
+    private func processMembershipSnapshot(snapshot: QuerySnapshot, searchMethod: String) {
+        print("🔄 PROCESANDO SNAPSHOT (método: \(searchMethod)):")
+        print("====================================")
+        print("📊 Documentos: \(snapshot.documents.count)")
+        print("🔄 Cambios: \(snapshot.documentChanges.count)")
+        
+        // ✅ DEBUGGING: Mostrar todos los cambios
+        for change in snapshot.documentChanges {
+            let data = change.document.data()
+            print("📄 Cambio detectado (\(change.type.rawValue)):")
+            print("  Doc ID: \(change.document.documentID)")
+            print("  Email: \(data["email"] as? String ?? "nil")")
+            print("  UserUID: \(data["userUID"] as? String ?? "nil")")
+            print("  Activa: \(data["activa"] as? Bool ?? false)")
+            print("  Estado: \(data["estadoDescripcion"] as? String ?? "nil")")
         }
+        print("====================================")
+        
+        debugInfo = "📥 \(searchMethod): \(snapshot.documents.count) docs, \(snapshot.documentChanges.count) cambios"
+
+        if let doc = snapshot.documents.first {
+            let docData = doc.data()
+            let previousMembership = userMembership
+            let newMembership = MembershipData(from: doc)
+
+            print("✅ MEMBRESÍA PROCESADA:")
+            print("====================================")
+            print("🆔 ID: \(doc.documentID)")
+            print("📧 Email: \(docData["email"] as? String ?? "nil")")
+            print("👤 UserUID: \(docData["userUID"] as? String ?? "nil")")
+            print("✅ Activa: \(docData["activa"] ?? "nil") -> \(newMembership.activa)")
+            print("📋 Estado: \(docData["estadoDescripcion"] as? String ?? "nil")")
+            print("🔍 Método búsqueda: \(searchMethod)")
+            print("====================================")
+
+            let wasInactive = previousMembership?.activa == false
+            let isNowActive = newMembership.activa == true
+            
+            print("🔄 CAMBIO DE ESTADO:")
+            print("- Estado anterior: \(previousMembership?.activa ?? false)")
+            print("- Estado nuevo: \(newMembership.activa)")
+            print("- ¿Cambió de inactiva a activa?: \(wasInactive && isNowActive)")
+            
+            // ✅ LOGS CRÍTICOS PARA LA UI
+            print("🎨 ACTUALIZANDO INTERFAZ DE USUARIO:")
+            print("- userMembership anterior: \(previousMembership != nil ? "existe" : "nil")")
+            print("- userMembership nuevo: existe con activa=\(newMembership.activa)")
+            print("- isLoading actual: \(isLoading)")
+            print("- debugInfo que se mostrará: \(searchMethod) Activa: \(newMembership.activa)")
+            
+            debugInfo = "✅ (\(searchMethod)) Activa: \(newMembership.activa) - Estado: \(newMembership.estadoDescripcion)"
+
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                userMembership = newMembership
+                print("🎨 ✅ userMembership ASIGNADA CON ANIMACIÓN")
+                print("🎨 ✅ Ahora userMembership.activa = \(newMembership.activa)")
+            }
+
+            if wasInactive && isNowActive {
+                print("🎉 Membresía activada - mostrando celebración")
+                showActivationCelebration()
+            }
+            
+            // ✅ LOG FINAL DE VERIFICACIÓN
+            print("🎨 ESTADO FINAL DE LA UI:")
+            print("- userMembership.activa: \(userMembership?.activa ?? false)")
+            print("- isLoading: \(isLoading)")
+            print("- debugInfo: \(debugInfo)")
+            
+        } else {
+            print("⚠️ No hay documentos en el snapshot")
+            debugInfo = "⚠️ Sin documentos en snapshot"
+            
+            print("🎨 LIMPIANDO INTERFAZ - No hay membresías")
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                userMembership = nil
+                print("🎨 ✅ userMembership ESTABLECIDA A NIL")
+            }
+        }
+
+        isLoading = false
+        print("🎨 ✅ isLoading establecido a FALSE - UI debería mostrar contenido")
+        print("====================================")
     }
     
     // MARK: - Celebración de activación
@@ -3771,6 +5602,117 @@ struct UserMembershipCard: View {
             impactFeedback.impactOccurred()
             
             print("🎉 ¡Membresía activada! Mostrando celebración")
+        }
+    }
+    
+    // MARK: - ✅ FUNCIÓN DE LIMPIEZA
+    private func cleanup() {
+        print("🧹 Limpiando listener de membresía...")
+        membershipListener?.remove()
+        membershipListener = nil
+    }
+    
+    // MARK: - ✅ FUNCIÓN DE DEBUGGING TEMPORAL
+    private func debugMembershipData() async {
+        // ✅ CORREGIR: Acceder a userData desde MainActor
+        let userData = await MainActor.run { authManager.currentUserData }
+        
+        guard let userData = userData else {
+            print("❌ No hay userData para debugging")
+            await MainActor.run {
+                debugInfo = "❌ No hay userData"
+            }
+            return
+        }
+        
+        do {
+            // 1. Verificar datos del usuario
+            print("🔍 DEBUGGING DATOS DEL USUARIO:")
+            print("====================================")
+            print("UID: \(userData.uid)")
+            print("Email: \(userData.email)")
+            print("Nombre: \(userData.nombre)")
+            print("====================================")
+            
+            // 2. Buscar membresías por userUID
+            let membershipsByUID = try await db.collection("membresias")
+                .whereField("userUID", isEqualTo: userData.uid)
+                .getDocuments()
+            
+            print("🔍 MEMBRESÍAS POR userUID:")
+            print("====================================")
+            print("Encontradas: \(membershipsByUID.documents.count)")
+            
+            for (index, doc) in membershipsByUID.documents.enumerated() {
+                let data = doc.data()
+                print("\n📄 MEMBRESÍA \(index + 1):")
+                print("🆔 ID: \(doc.documentID)")
+                print("📧 Email: \(data["email"] as? String ?? "nil")")
+                print("👤 UserUID: \(data["userUID"] as? String ?? "nil")")
+                print("✅ Activa: \(data["activa"] as? Bool ?? false)")
+                print("📋 Estado: \(data["estadoDescripcion"] as? String ?? "nil")")
+                print("🏷️ Tipo: \(data["tipoMembresia"] as? String ?? "nil")")
+                print("📅 Inicio: \(data["fechaInicio"] as? String ?? "nil")")
+                print("📅 Venc: \(data["fechaVencimiento"] as? String ?? "nil")")
+                print("⏰ Días: \(data["diasRestantes"] as? Int ?? 0)")
+                print("🔄 Req.Act: \(data["requiereActivacion"] as? Bool ?? true)")
+                
+                // Mostrar TODOS los campos
+                print("📋 TODOS LOS CAMPOS:")
+                for (key, value) in data.sorted(by: { $0.key < $1.key }) {
+                    print("  \(key): \(value)")
+                }
+            }
+            
+            // 3. Buscar también por email para comparar
+            let membershipsByEmail = try await db.collection("membresias")
+                .whereField("email", isEqualTo: userData.email)
+                .getDocuments()
+            
+            print("\n🔍 MEMBRESÍAS POR EMAIL:")
+            print("====================================")
+            print("Encontradas: \(membershipsByEmail.documents.count)")
+            
+            for (index, doc) in membershipsByEmail.documents.enumerated() {
+                let data = doc.data()
+                print("\n📄 MEMBRESÍA \(index + 1) (por email):")
+                print("🆔 ID: \(doc.documentID)")
+                print("📧 Email: \(data["email"] as? String ?? "nil")")
+                print("👤 UserUID: \(data["userUID"] as? String ?? "nil")")
+                print("✅ Activa: \(data["activa"] as? Bool ?? false)")
+                print("📋 Estado: \(data["estadoDescripcion"] as? String ?? "nil")")
+            }
+            
+            print("====================================")
+            
+            // 4. Verificar estado actual del listener
+            print("🔍 ESTADO ACTUAL DE LA VISTA:")
+            print("====================================")
+            
+            // ✅ ACCEDER A PROPIEDADES DE LA UI DESDE MainActor
+            await MainActor.run {
+                print("Loading: \(isLoading)")
+                print("UserMembership existe: \(userMembership != nil)")
+                if let membership = userMembership {
+                    print("Membership activa: \(membership.activa)")
+                    print("Membership estado: \(membership.estadoDescripcion)")
+                    print("Membership ID: \(membership.id)")
+                    print("Membership userUID: \(membership.userUID)")
+                }
+                print("DebugInfo: \(debugInfo)")
+            }
+            print("====================================")
+            
+            // 5. Actualizar debugInfo en la UI
+            await MainActor.run {
+                debugInfo = "✅ Debug completo - ver consola para detalles"
+            }
+            
+        } catch {
+            print("❌ Error en debugging: \(error.localizedDescription)")
+            await MainActor.run {
+                debugInfo = "❌ Error: \(error.localizedDescription)"
+            }
         }
     }
 }
@@ -3826,9 +5768,12 @@ struct AdminDashboard: View {
                         AdminHeaderCard(authManager: authManager, dashboardManager: dashboardManager)
                         
                         // Gestión de membresías
-                        AdminMembershipsListCard()
+                        //AdminMembershipsListCard()
                         
-                        // ✅ NUEVO: Panel de recordatorios de pago
+                        EnhancedAdminMembershipsCard()
+                                            
+                        RevenueDashboard()
+                                            
                         PaymentReminderDashboard()
                         
                         // Chat IA
@@ -3874,9 +5819,12 @@ struct AdminDashboard: View {
                     AdminHeaderCard(authManager: authManager, dashboardManager: dashboardManager)
                     
                     // Gestión de membresías
-                    AdminMembershipsListCard()
+                    //AdminMembershipsListCard()
                     
-                    // ✅ NUEVO: Panel de recordatorios de pago
+                    EnhancedAdminMembershipsCard()
+                                        
+                    RevenueDashboard()
+                                        
                     PaymentReminderDashboard()
                     
                     // Chat IA
@@ -4526,4 +6474,183 @@ extension FCMNotificationManager: MessagingDelegate {
             }
         }
     }
+}
+struct TransactionData: Identifiable, Codable {
+    let id: String
+    let userEmail: String
+    let userName: String
+    let membershipType: String
+    let amount: Double
+    let customPrice: Double?
+    let originalPrice: Double
+    let duration: Int // días
+    let transactionType: String // "activation", "renewal"
+    let paymentMethod: String // "efectivo", "transferencia", "tarjeta"
+    let createdDate: Date
+    let membershipStartDate: Date
+    let membershipEndDate: Date
+    let adminUserId: String
+    let adminUserName: String
+    let notes: String?
+    
+    init(from document: QueryDocumentSnapshot) {
+        let data = document.data()
+        self.id = document.documentID
+        self.userEmail = data["userEmail"] as? String ?? ""
+        self.userName = data["userName"] as? String ?? ""
+        self.membershipType = data["membershipType"] as? String ?? ""
+        self.amount = data["amount"] as? Double ?? 0.0
+        self.customPrice = data["customPrice"] as? Double
+        self.originalPrice = data["originalPrice"] as? Double ?? 0.0
+        self.duration = data["duration"] as? Int ?? 30
+        self.transactionType = data["transactionType"] as? String ?? "activation"
+        self.paymentMethod = data["paymentMethod"] as? String ?? "efectivo"
+        self.createdDate = (data["createdDate"] as? Timestamp)?.dateValue() ?? Date()
+        self.membershipStartDate = (data["membershipStartDate"] as? Timestamp)?.dateValue() ?? Date()
+        self.membershipEndDate = (data["membershipEndDate"] as? Timestamp)?.dateValue() ?? Date()
+        self.adminUserId = data["adminUserId"] as? String ?? ""
+        self.adminUserName = data["adminUserName"] as? String ?? ""
+        self.notes = data["notes"] as? String
+    }
+}
+
+// MARK: - Manager de Ganancias
+@MainActor
+class RevenueManager: ObservableObject {
+    static let shared = RevenueManager()
+    
+    @Published var transactions: [TransactionData] = []
+    @Published var totalRevenue: Double = 0.0
+    @Published var monthlyRevenue: Double = 0.0
+    @Published var isLoading = false
+    
+    private let db = Firestore.firestore()
+    
+    private init() {}
+    
+    // MARK: - Registrar nueva transacción
+    func recordTransaction(
+        userEmail: String,
+        userName: String,
+        membershipType: String,
+        originalPrice: Double,
+        customPrice: Double?,
+        duration: Int,
+        transactionType: String,
+        paymentMethod: String,
+        membershipStartDate: Date,
+        membershipEndDate: Date,
+        adminUserId: String,
+        adminUserName: String,
+        notes: String? = nil
+    ) async -> Bool {
+        
+        let finalAmount = customPrice ?? originalPrice
+        
+        let transactionData: [String: Any] = [
+            "userEmail": userEmail,
+            "userName": userName,
+            "membershipType": membershipType,
+            "amount": finalAmount,
+            "customPrice": customPrice as Any,
+            "originalPrice": originalPrice,
+            "duration": duration,
+            "transactionType": transactionType,
+            "paymentMethod": paymentMethod,
+            "createdDate": Timestamp(date: Date()),
+            "membershipStartDate": Timestamp(date: membershipStartDate),
+            "membershipEndDate": Timestamp(date: membershipEndDate),
+            "adminUserId": adminUserId,
+            "adminUserName": adminUserName,
+            "notes": notes as Any
+        ]
+        
+        do {
+            let documentRef = try await db.collection("revenue_transactions").addDocument(data: transactionData)
+            
+            print("✅ Transacción registrada con ID: \(documentRef.documentID)")
+            print("💰 Monto: $\(finalAmount)")
+            print("👤 Usuario: \(userName) (\(userEmail))")
+            print("🎯 Tipo: \(transactionType)")
+            
+            // Actualizar totales
+            await updateRevenueTotals()
+            
+            return true
+        } catch {
+            print("❌ Error registrando transacción: \(error.localizedDescription)")
+            return false
+        }
+    }
+    
+    // MARK: - Cargar transacciones
+    func loadTransactions() async {
+        isLoading = true
+        
+        do {
+            let snapshot = try await db.collection("revenue_transactions")
+                .order(by: "createdDate", descending: true)
+                .getDocuments()
+            
+            transactions = snapshot.documents.compactMap { TransactionData(from: $0) }
+            
+            await updateRevenueTotals()
+            
+        } catch {
+            print("❌ Error cargando transacciones: \(error.localizedDescription)")
+        }
+        
+        isLoading = false
+    }
+    
+    // MARK: - Actualizar totales de ingresos
+    private func updateRevenueTotals() async {
+        totalRevenue = transactions.reduce(0) { $0 + $1.amount }
+        
+        // Calcular ingresos del mes actual
+        let calendar = Calendar.current
+        let now = Date()
+        let thisMonth = calendar.dateInterval(of: .month, for: now)
+        
+        monthlyRevenue = transactions.filter { transaction in
+            guard let monthInterval = thisMonth else { return false }
+            return monthInterval.contains(transaction.createdDate)
+        }.reduce(0) { $0 + $1.amount }
+        
+        print("💰 Total ingresos: $\(totalRevenue)")
+        print("📅 Ingresos del mes: $\(monthlyRevenue)")
+    }
+    
+    // MARK: - Obtener estadísticas por período
+    func getRevenueBetween(startDate: Date, endDate: Date) -> Double {
+        return transactions.filter { transaction in
+            transaction.createdDate >= startDate && transaction.createdDate <= endDate
+        }.reduce(0) { $0 + $1.amount }
+    }
+    
+    // MARK: - Obtener transacciones por método de pago
+    func getTransactionsByPaymentMethod() -> [String: Double] {
+        var result: [String: Double] = [:]
+        
+        for transaction in transactions {
+            result[transaction.paymentMethod, default: 0] += transaction.amount
+        }
+        
+        return result
+    }
+}
+
+// MARK: - Extensión de DateFormatter
+extension DateFormatter {
+    static let shortDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM"
+        return formatter
+    }()
+    
+    static let fullDate: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "dd/MM/yyyy HH:mm"
+        return formatter
+    }()
 }

@@ -388,6 +388,54 @@ class AuthManager: ObservableObject {
         }
     }
     
+    func loadUserData(uid: String) async {
+            print("🔄 Recargando datos del usuario con UID: \(uid)")
+            
+            do {
+                let document = try await Firestore.firestore().collection("usuarios").document(uid).getDocument()
+                
+                if document.exists, let data = document.data() {
+                    print("✅ Documento de usuario encontrado en Firestore")
+                    
+                    let userData = UserData(
+                        uid: uid,
+                        email: data["email"] as? String ?? "",
+                        displayName: data["displayName"] as? String ?? "",
+                        idTipoDocumento: data["idTipoDocumento"] as? Int ?? 1,
+                        numeroDocumento: data["numeroDocumento"] as? String ?? "",
+                        nombre: data["nombre"] as? String ?? "",
+                        apellido: data["apellido"] as? String ?? "",
+                        telefono: data["telefono"] as? String ?? "",
+                        fechaNacimiento: (data["fechaNacimiento"] as? Timestamp)?.dateValue() ?? Date(),
+                        direccion: data["direccion"] as? String ?? "",
+                        activo: data["activo"] as? Bool ?? true,
+                        idGenero: data["idGenero"] as? Int ?? 1,
+                        edad: data["edad"] as? String,
+                        peso: data["peso"] as? String,
+                        estatura: data["estatura"] as? String,
+                        fechaCreacion: (data["fechaCreacion"] as? Timestamp)?.dateValue() ?? Date(),
+                        rol: data["rol"] as? String ?? "usuario"
+                    )
+                    
+                    await MainActor.run {
+                        self.currentUserData = userData
+                        print("✅ Datos de usuario asignados al AuthManager")
+                        print("- Nombre: \(userData.nombre)")
+                        print("- Email: \(userData.email)")
+                        print("- Rol: \(userData.rol)")
+                    }
+                    
+                } else {
+                    print("❌ No se encontró documento del usuario en Firestore")
+                    print("- UID buscado: \(uid)")
+                    print("- Document exists: \(document.exists)")
+                }
+                
+            } catch {
+                print("❌ Error cargando datos del usuario: \(error.localizedDescription)")
+            }
+        }
+    
     func createUserWithFirestoreAndMembership(email: String, password: String, userData: UserData) async {
            await MainActor.run {
                self.isLoading = true
@@ -571,29 +619,6 @@ class AuthManager: ObservableObject {
         // Error genérico
         default:
             return "❌ Ha ocurrido un error. Por favor, intenta de nuevo"
-        }
-    }
-    
-    func loadUserData(uid: String) async {
-        print("🔐 AuthManager: Cargando datos del usuario: \(uid)")
-        
-        do {
-            let doc = try await Firestore.firestore().collection("usuarios").document(uid).getDocument()
-            if let data = doc.data() {
-                let fetched = UserData(from: data, uid: uid)
-                
-                await MainActor.run {
-                    self.currentUserData = fetched
-                    print("✅ AuthManager: Datos de usuario cargados exitosamente con rol: \(fetched.rol)")
-                }
-            } else {
-                print("⚠️ AuthManager: No se encontraron datos del usuario en Firestore")
-            }
-        } catch {
-            await MainActor.run {
-                self.errorMessage = "❌ Error al cargar los datos del usuario"
-                print("❌ AuthManager: Error cargando datos: \(error.localizedDescription)")
-            }
         }
     }
     

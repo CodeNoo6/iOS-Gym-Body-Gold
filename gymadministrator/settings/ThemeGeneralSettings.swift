@@ -294,7 +294,7 @@ struct TitleSection: View {
                 .font(.system(size: 32, weight: .bold, design: .rounded))
                 .foregroundColor(.brandGold)
             
-            Text(isSignUp ? "Crear cuenta de administrador" : "Bienvenido de vuelta")
+            Text(isSignUp ? "Crea una cuenta" : "Bienvenido de vuelta")
                 .font(.subheadline)
                 .foregroundColor(.brandLight.opacity(0.8))
         }
