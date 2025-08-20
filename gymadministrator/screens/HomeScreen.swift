@@ -481,8 +481,10 @@ struct BroadcastTypeCard: View {
             .scaleEffect(isSelected ? 1.05 : 1.0)
             .animation(.spring(response: 0.3), value: isSelected)
         }
+        // ✅ EL DISABLED SE MANEJA DESDE EL PADRE
     }
 }
+
 
 // MARK: - Admin Quick Action Button
 struct AdminQuickActionButton: View {
@@ -534,6 +536,15 @@ struct BroadcastMessageSheet: View {
     @State private var showingConfirmation = false
     @State private var activeUsersCount = 0
     
+    // ✅ NUEVOS ESTADOS PARA MEJOR UX
+    @State private var currentUserBeingSent = ""
+    @State private var sentCount = 0
+    @State private var totalToSend = 0
+    @State private var sendingStartTime: Date?
+    @State private var estimatedTimeRemaining: TimeInterval = 0
+    @State private var showingSuccessAlert = false
+    @State private var sendingError: String?
+    
     var body: some View {
         NavigationView {
             ZStack {
@@ -542,145 +553,28 @@ struct BroadcastMessageSheet: View {
                 ScrollView {
                     VStack(spacing: 24) {
                         // Header Info
-                        VStack(spacing: 12) {
-                            Image(systemName: "megaphone.fill")
-                                .font(.system(size: 50))
-                                .foregroundColor(.brandGold)
-                            
-                            Text("Mensaje Masivo")
-                                .font(.title2)
-                                .fontWeight(.bold)
-                                .foregroundColor(.brandGold)
-                            
-                            Text("Envía un mensaje personalizado a todos los clientes activos")
-                                .font(.subheadline)
-                                .foregroundColor(.brandLight.opacity(0.7))
-                                .multilineTextAlignment(.center)
-                        }
-                        .padding(.horizontal)
+                        headerSection
                         
                         // Message Type Selector
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("Tipo de Mensaje")
-                                .font(.headline)
-                                .foregroundColor(.brandGold)
-                            
-                            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 12) {
-                                ForEach(BroadcastMessageType.allCases, id: \.self) { type in
-                                    BroadcastTypeCard(
-                                        type: type,
-                                        isSelected: selectedMessageType == type
-                                    ) {
-                                        selectedMessageType = type
-                                        updateMessageContent()
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
+                        messageTypeSection
                         
                         // Custom Message Fields
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text("Personalizar Mensaje")
-                                .font(.headline)
-                                .foregroundColor(.brandGold)
-                            
-                            // Title Field
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Título")
-                                    .font(.subheadline)
-                                    .foregroundColor(.brandLight)
-                                
-                                TextField("Escribe el título de la notificación", text: $messageTitle)
-                                    .padding(12)
-                                    .background(Color.brandDark)
-                                    .foregroundColor(.brandWhite)
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
-                                    )
-                            }
-                            
-                            // Body Field
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Mensaje")
-                                    .font(.subheadline)
-                                    .foregroundColor(.brandLight)
-                                
-                                TextField("Escribe el contenido del mensaje", text: $messageBody, axis: .vertical)
-                                    .lineLimit(3...6)
-                                    .padding(12)
-                                    .background(Color.brandDark)
-                                    .foregroundColor(.brandWhite)
-                                    .cornerRadius(8)
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
-                                    )
-                            }
-                            
-                            // Preview
-                            VStack(alignment: .leading, spacing: 8) {
-                                Text("Vista Previa")
-                                    .font(.subheadline)
-                                    .foregroundColor(.brandLight)
-                                
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Image(systemName: "bell.fill")
-                                            .foregroundColor(.brandGold)
-                                        Text("Gym Body Gold")
-                                            .font(.caption)
-                                            .foregroundColor(.brandLight.opacity(0.7))
-                                        Spacer()
-                                        Text("ahora")
-                                            .font(.caption)
-                                            .foregroundColor(.brandLight.opacity(0.5))
-                                    }
-                                    
-                                    Text(messageTitle.isEmpty ? "Título del mensaje" : messageTitle)
-                                        .font(.subheadline)
-                                        .fontWeight(.semibold)
-                                        .foregroundColor(.brandWhite)
-                                    
-                                    Text(messageBody.isEmpty ? "Contenido del mensaje aparecerá aquí" : messageBody)
-                                        .font(.caption)
-                                        .foregroundColor(.brandLight.opacity(0.8))
-                                }
-                                .padding(12)
-                                .background(Color.brandDark.opacity(0.3))
-                                .cornerRadius(8)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 8)
-                                        .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
-                                )
-                            }
-                        }
-                        .padding(.horizontal)
+                        messageFieldsSection
                         
-                        // Send Progress
+                        // ✅ SECCIÓN DE PROGRESO MEJORADA
                         if isSending {
-                            VStack(spacing: 12) {
-                                Text("Enviando mensajes...")
-                                    .font(.headline)
-                                    .foregroundColor(.brandGold)
-                                
-                                ProgressView(value: sendingProgress, total: 1.0)
-                                    .progressViewStyle(LinearProgressViewStyle(tint: .brandGold))
-                                    .background(Color.brandDark)
-                                    .cornerRadius(4)
-                                
-                                Text("\(Int(sendingProgress * Double(activeUsersCount))) de \(activeUsersCount) enviados")
-                                    .font(.caption)
-                                    .foregroundColor(.brandLight.opacity(0.7))
-                            }
-                            .padding()
-                            .background(Color.brandDark.opacity(0.5))
-                            .cornerRadius(12)
-                            .padding(.horizontal)
+                            sendingProgressSection
                         }
                     }
+                }
+                
+                // ✅ OVERLAY DE ENVÍO CON BLUR
+                if isSending {
+                    Color.black.opacity(0.7)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(true) // Bloquear interacciones
+                    
+                    sendingOverlay
                 }
             }
             .navigationTitle("Mensaje Masivo")
@@ -688,9 +582,11 @@ struct BroadcastMessageSheet: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button("Cancelar") {
-                        dismiss()
+                        if !isSending {
+                            dismiss()
+                        }
                     }
-                    .foregroundColor(.brandLight)
+                    .foregroundColor(isSending ? .gray : .brandLight)
                     .disabled(isSending)
                 }
                 
@@ -698,7 +594,7 @@ struct BroadcastMessageSheet: View {
                     Button("Enviar") {
                         showingConfirmation = true
                     }
-                    .foregroundColor(.brandGold)
+                    .foregroundColor(isSending ? .gray : .brandGold)
                     .fontWeight(.semibold)
                     .disabled(messageTitle.isEmpty || messageBody.isEmpty || isSending)
                 }
@@ -711,7 +607,14 @@ struct BroadcastMessageSheet: View {
                 }
                 Button("Cancelar", role: .destructive) { }
             } message: {
-                Text("¿Estás seguro de que quieres enviar este mensaje a todos los clientes activos?")
+                Text("¿Estás seguro de que quieres enviar este mensaje a todos los clientes activos (\(activeUsersCount) usuarios)?")
+            }
+            .alert("¡Mensajes Enviados!", isPresented: $showingSuccessAlert) {
+                Button("Cerrar") {
+                    dismiss()
+                }
+            } message: {
+                Text("Se enviaron \(sentCount) mensajes exitosamente en \(formatTime(sendingStartTime?.timeIntervalSinceNow ?? 0))")
             }
             .onAppear {
                 updateActiveUsersCount()
@@ -719,54 +622,319 @@ struct BroadcastMessageSheet: View {
             }
             .preferredColorScheme(.dark)
         }
+        .interactiveDismissDisabled(isSending) // ✅ Prevenir cierre durante envío
     }
     
-    private func updateActiveUsersCount() {
-        activeUsersCount = userManager.adminUsers.filter { $0.activo }.count
+    // MARK: - Header Section
+    private var headerSection: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "megaphone.fill")
+                .font(.system(size: 50))
+                .foregroundColor(.brandGold)
+            
+            Text("Mensaje Masivo")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.brandGold)
+            
+            HStack {
+                Image(systemName: "person.3.fill")
+                    .foregroundColor(.brandGold)
+                Text("Usuarios activos: \(activeUsersCount)")
+                    .foregroundColor(.brandLight)
+            }
+            .font(.subheadline)
+        }
+        .padding(.horizontal)
     }
     
-    private func updateMessageContent() {
-        messageTitle = selectedMessageType.defaultTitle
-        messageBody = selectedMessageType.defaultBody
+    // MARK: - Message Type Section
+    private var messageTypeSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Tipo de Mensaje")
+                .font(.headline)
+                .foregroundColor(.brandGold)
+            
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 2), spacing: 12) {
+                ForEach(BroadcastMessageType.allCases, id: \.self) { type in
+                    BroadcastTypeCard(
+                        type: type,
+                        isSelected: selectedMessageType == type
+                    ) {
+                        selectedMessageType = type
+                        updateMessageContent()
+                    }
+                    .disabled(isSending) // ✅ Deshabilitar durante envío
+                }
+            }
+        }
+        .padding(.horizontal)
+        .opacity(isSending ? 0.5 : 1.0) // ✅ Indicador visual
     }
     
+    // MARK: - Message Fields Section
+    private var messageFieldsSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Personalizar Mensaje")
+                .font(.headline)
+                .foregroundColor(.brandGold)
+            
+            // Title Field
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Título")
+                    .font(.subheadline)
+                    .foregroundColor(.brandLight)
+                
+                TextField("Escribe el título de la notificación", text: $messageTitle)
+                    .padding(12)
+                    .background(Color.brandDark)
+                    .foregroundColor(.brandWhite)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
+                    )
+                    .disabled(isSending) // ✅ Deshabilitar durante envío
+            }
+            
+            // Body Field
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Mensaje")
+                    .font(.subheadline)
+                    .foregroundColor(.brandLight)
+                
+                TextField("Escribe el contenido del mensaje", text: $messageBody, axis: .vertical)
+                    .lineLimit(3...6)
+                    .padding(12)
+                    .background(Color.brandDark)
+                    .foregroundColor(.brandWhite)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
+                    )
+                    .disabled(isSending) // ✅ Deshabilitar durante envío
+            }
+            
+            // Preview
+            if !isSending {
+                previewSection
+            }
+        }
+        .padding(.horizontal)
+        .opacity(isSending ? 0.5 : 1.0) // ✅ Indicador visual
+    }
+    
+    // MARK: - Preview Section
+    private var previewSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Vista Previa")
+                .font(.subheadline)
+                .foregroundColor(.brandLight)
+            
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Image(systemName: "bell.fill")
+                        .foregroundColor(.brandGold)
+                    Text("Gym Body Gold")
+                        .font(.caption)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                    Spacer()
+                    Text("ahora")
+                        .font(.caption)
+                        .foregroundColor(.brandLight.opacity(0.5))
+                }
+                
+                Text(messageTitle.isEmpty ? "Título del mensaje" : messageTitle)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.brandWhite)
+                
+                Text(messageBody.isEmpty ? "Contenido del mensaje aparecerá aquí" : messageBody)
+                    .font(.caption)
+                    .foregroundColor(.brandLight.opacity(0.8))
+            }
+            .padding(12)
+            .background(Color.brandDark.opacity(0.3))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+            )
+        }
+    }
+    
+    // MARK: - ✅ NUEVA SECCIÓN DE PROGRESO DETALLADA
+    private var sendingProgressSection: some View {
+        VStack(spacing: 16) {
+            Text("Enviando mensajes...")
+                .font(.headline)
+                .foregroundColor(.brandGold)
+            
+            // Barra de progreso
+            VStack(spacing: 8) {
+                ProgressView(value: sendingProgress, total: 1.0)
+                    .progressViewStyle(LinearProgressViewStyle(tint: .brandGold))
+                    .background(Color.brandDark)
+                    .cornerRadius(4)
+                    .scaleEffect(1.2)
+                
+                HStack {
+                    Text("\(sentCount) de \(totalToSend) enviados")
+                        .font(.caption)
+                        .foregroundColor(.brandLight)
+                    
+                    Spacer()
+                    
+                    Text("\(Int(sendingProgress * 100))%")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.brandGold)
+                }
+            }
+            
+            // Usuario actual
+            if !currentUserBeingSent.isEmpty {
+                HStack {
+                    Image(systemName: "paperplane.fill")
+                        .foregroundColor(.brandGold)
+                        .symbolEffect(.pulse)
+                    
+                    Text("Enviando a: \(currentUserBeingSent)")
+                        .font(.caption)
+                        .foregroundColor(.brandLight.opacity(0.8))
+                }
+                .padding(8)
+                .background(Color.brandGold.opacity(0.1))
+                .cornerRadius(8)
+            }
+            
+            // Tiempo estimado
+            if estimatedTimeRemaining > 0 {
+                Text("Tiempo estimado restante: \(formatTime(estimatedTimeRemaining))")
+                    .font(.caption2)
+                    .foregroundColor(.brandLight.opacity(0.6))
+            }
+        }
+        .padding(16)
+        .background(Color.brandDark.opacity(0.8))
+        .cornerRadius(12)
+        .padding(.horizontal)
+    }
+    
+    // MARK: - ✅ OVERLAY DE ENVÍO CON ANIMACIÓN
+    private var sendingOverlay: some View {
+        VStack(spacing: 24) {
+            // Icono animado
+            ZStack {
+                Circle()
+                    .fill(Color.brandGold.opacity(0.2))
+                    .frame(width: 100, height: 100)
+                
+                Image(systemName: "paperplane.fill")
+                    .font(.system(size: 40))
+                    .foregroundColor(.brandGold)
+                    .symbolEffect(.bounce, options: .repeating)
+            }
+            
+            // Texto principal
+            VStack(spacing: 8) {
+                Text("Enviando Mensajes")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.brandWhite)
+                
+                Text("Por favor, no cierres la aplicación")
+                    .font(.subheadline)
+                    .foregroundColor(.brandLight.opacity(0.8))
+                    .multilineTextAlignment(.center)
+            }
+            
+            // Progreso detallado
+            VStack(spacing: 12) {
+                ProgressView(value: sendingProgress, total: 1.0)
+                    .progressViewStyle(LinearProgressViewStyle(tint: .brandGold))
+                    .background(Color.brandDark)
+                    .cornerRadius(4)
+                    .frame(width: 200)
+                
+                Text("\(sentCount) de \(totalToSend) mensajes enviados")
+                    .font(.caption)
+                    .foregroundColor(.brandLight)
+                
+                if !currentUserBeingSent.isEmpty {
+                    Text("Enviando a: \(currentUserBeingSent)")
+                        .font(.caption2)
+                        .foregroundColor(.brandGold)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 4)
+                        .background(Color.brandGold.opacity(0.2))
+                        .cornerRadius(8)
+                }
+            }
+        }
+        .frame(maxWidth: 300)
+        .padding(32)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color.brandBlack.opacity(0.95))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20)
+                        .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
+                )
+        )
+        .shadow(color: Color.black.opacity(0.5), radius: 20)
+    }
+    
+    // MARK: - ✅ FUNCIÓN DE ENVÍO MEJORADA CON PROGRESO DETALLADO
     private func sendBroadcastMessage() async {
-        isSending = true
-        sendingProgress = 0.0
+        await MainActor.run {
+            isSending = true
+            sendingProgress = 0.0
+            sentCount = 0
+            currentUserBeingSent = ""
+            sendingStartTime = Date()
+            sendingError = nil
+        }
         
-        // ✅ FORZAR RECARGA antes de enviar
+        // Forzar recarga antes de enviar
         print("🔄 Recargando usuarios antes del envío masivo...")
         await userManager.forceReloadUsers()
         
-        // Esperar un momento para que se complete la recarga
         try? await Task.sleep(nanoseconds: 500_000_000) // 0.5 segundos
-        
-        // Resto del código igual...
-        print("🔍 DEBUG MENSAJE MASIVO:")
-        print("====================================")
-        print("📊 Total usuarios cargados: \(userManager.adminUsers.count)")
-        
-        for user in userManager.adminUsers {
-            print("👤 \(user.nombre) \(user.apellido) - Activo: \(user.activo) - Email: \(user.email)")
-        }
         
         let activeUsers = userManager.adminUsers.filter { $0.activo }
         let totalUsers = activeUsers.count
         
+        await MainActor.run {
+            totalToSend = totalUsers
+        }
+        
         print("✅ Usuarios activos encontrados: \(totalUsers)")
-        print("====================================")
         
         if totalUsers == 0 {
-            print("❌ No hay usuarios activos para enviar mensajes")
             await MainActor.run {
                 isSending = false
-                // Mostrar alerta al usuario
+                sendingError = "No hay usuarios activos para enviar mensajes"
             }
             return
         }
         
-        // Resto del código de envío...
+        // Enviar mensajes con progreso detallado
         for (index, user) in activeUsers.enumerated() {
+            await MainActor.run {
+                currentUserBeingSent = user.nombre
+                sentCount = index
+                sendingProgress = Double(index) / Double(totalUsers)
+                
+                // Calcular tiempo estimado restante
+                if let startTime = sendingStartTime, index > 0 {
+                    let elapsedTime = Date().timeIntervalSince(startTime)
+                    let timePerMessage = elapsedTime / Double(index)
+                    estimatedTimeRemaining = timePerMessage * Double(totalUsers - index)
+                }
+            }
+            
             print("📤 Enviando mensaje \(index + 1)/\(totalUsers) a: \(user.nombre)")
             
             await userManager.sendCustomNotificationToUser(
@@ -777,21 +945,39 @@ struct BroadcastMessageSheet: View {
                 messageType: selectedMessageType
             )
             
-            await MainActor.run {
-                sendingProgress = Double(index + 1) / Double(totalUsers)
-            }
-            
-            try? await Task.sleep(nanoseconds: 500_000_000)
+            // Delay entre mensajes para no sobrecargar
+            try? await Task.sleep(nanoseconds: 750_000_000) // 0.75 segundos
         }
         
+        // Completar envío
         await MainActor.run {
+            sentCount = totalUsers
+            sendingProgress = 1.0
+            currentUserBeingSent = ""
             isSending = false
-            dismiss()
+            showingSuccessAlert = true
         }
         
-        print("✅ Mensaje masivo enviado a \(totalUsers) usuarios activos")
+        print("✅ Mensaje masivo completado - \(totalUsers) mensajes enviados")
+    }
+    
+    // MARK: - ✅ FUNCIONES AUXILIARES
+    private func updateActiveUsersCount() {
+        activeUsersCount = userManager.adminUsers.filter { $0.activo }.count
+    }
+    
+    private func updateMessageContent() {
+        messageTitle = selectedMessageType.defaultTitle
+        messageBody = selectedMessageType.defaultBody
+    }
+    
+    private func formatTime(_ timeInterval: TimeInterval) -> String {
+        let minutes = Int(abs(timeInterval)) / 60
+        let seconds = Int(abs(timeInterval)) % 60
+        return String(format: "%d:%02d", minutes, seconds)
     }
 }
+
 
 // MARK: - Admin Header Card
 
@@ -1420,6 +1606,7 @@ class AdminUserManager: ObservableObject {
     
     // En AdminUserManager, agregar esta función:
 
+    
     func sendCustomNotificationToUser(
         userId: String,
         userName: String,
@@ -1427,25 +1614,29 @@ class AdminUserManager: ObservableObject {
         body: String,
         messageType: BroadcastMessageType
     ) async {
-        // Obtener FCM token del usuario desde Firestore
-        let fcmToken = await getFCMTokenFromFirestore(userId: userId)
-        
-        // ✅ CORREGIR: Usar claves sin guiones bajos
-        await FCMNotificationManager.shared.sendNotificationToUser(
-            userId: userId,
-            title: title,
-            body: body,
-            data: [
-                "type": "broadcast",  // ✅ Sin guión bajo
-                "messagetype": messageType.rawValue,  // ✅ Sin guión bajo
-                "userid": userId,  // ✅ Sin guión bajo
-                "timestamp": "\(Date().timeIntervalSince1970)",
-                "source": "admin"
-            ],
-            directToken: fcmToken
-        )
-        
-        print("📱 Mensaje personalizado enviado a: \(userName)")
+        do {
+            // Obtener FCM token del usuario desde Firestore
+            let fcmToken = await getFCMTokenFromFirestore(userId: userId)
+            
+            await FCMNotificationManager.shared.sendNotificationToUser(
+                userId: userId,
+                title: title,
+                body: body,
+                data: [
+                    "type": "broadcast",
+                    "messagetype": messageType.rawValue,
+                    "userid": userId,
+                    "timestamp": "\(Date().timeIntervalSince1970)",
+                    "source": "admin"
+                ],
+                directToken: fcmToken
+            )
+            
+            print("📱 Mensaje enviado exitosamente a: \(userName)")
+            
+        } catch {
+            print("❌ Error enviando mensaje a \(userName): \(error.localizedDescription)")
+        }
     }
     
     func toggleUserStatusViaLaravel(userId: String, userName: String, currentStatus: Bool) async {
