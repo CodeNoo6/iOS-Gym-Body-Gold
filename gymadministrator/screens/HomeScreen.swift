@@ -2069,58 +2069,181 @@ class AdminMembershipManager: ObservableObject {
             }
     }
     
-    func toggleMembershipStatus(membershipId: String, userEmail: String, currentStatus: Bool) async {
+    func reactivateMembershipPreservingDays(membershipId: String, userEmail: String) async {
         do {
-            let newStatus = !currentStatus
+            // 1. Obtener datos de la membresía suspendida
+            let document = try await db.collection("membresias").document(membershipId).getDocument()
             
-            if newStatus {
-                // Activar membresía - establecer fechas
-                let startDate = Date()
-                let endDate = Calendar.current.date(byAdding: .month, value: 1, to: startDate) ?? Date()
-                let daysRemaining = Calendar.current.dateComponents([.day], from: Date(), to: endDate).day ?? 0
-                
-                try await db.collection("membresias").document(membershipId).updateData([
-                    "activa": true,
-                    "estadoDescripcion": "Activa",
-                    "fechaInicio": DateFormatter.membershipFormatter.string(from: startDate),
-                    "fechaVencimiento": DateFormatter.membershipFormatter.string(from: endDate),
-                    "diasRestantes": daysRemaining,
-                    "requiereActivacion": false,
-                    "fechaActivacion": Timestamp()
-                ])
-                
-                print("✅ Membresía activada para: \(userEmail)")
-                
-                // Enviar notificación de activación
-                await sendMembershipNotification(
-                    userEmail: userEmail,
-                    isActivation: true,
-                    membershipType: "Básica"
-                )
-                
-            } else {
-                // Desactivar membresía
-                try await db.collection("membresias").document(membershipId).updateData([
-                    "activa": false,
-                    "estadoDescripcion": "Suspendida",
-                    "fechaDesactivacion": Timestamp()
-                ])
-                
-                print("✅ Membresía desactivada para: \(userEmail)")
-                
-                // Enviar notificación de suspensión
-                await sendMembershipNotification(
-                    userEmail: userEmail,
-                    isActivation: false,
-                    membershipType: "Básica"
-                )
+            guard document.exists, let data = document.data() else {
+                print("❌ No se encontró la membresía para reactivar")
+                return
             }
+            
+            // 2. Obtener días que tenía antes de suspender
+            let preservedDays = data["diasRestantesAntesSuspension"] as? Int ??
+                               data["diasRestantes"] as? Int ?? 0
+            
+            // 3. Calcular nueva fecha de vencimiento basada en días preservados
+            let newStartDate = Date()
+            let newEndDate = Calendar.current.date(byAdding: .day, value: preservedDays, to: newStartDate) ?? Date()
+            
+            print("🔄 REACTIVANDO MEMBRESÍA:")
+            print("====================================")
+            print("📧 Email: \(userEmail)")
+            print("📅 Días restaurados: \(preservedDays)")
+            print("📅 Nueva fecha inicio: \(DateFormatter.membershipFormatter.string(from: newStartDate))")
+            print("📅 Nueva fecha vencimiento: \(DateFormatter.membershipFormatter.string(from: newEndDate))")
+            print("====================================")
+            
+            // 4. Reactivar con días preservados
+            try await db.collection("membresias").document(membershipId).updateData([
+                "activa": true,
+                "estadoDescripcion": "Activa",
+                "fechaReactivacion": Timestamp(date: Date()),
+                "fechaInicio": DateFormatter.membershipFormatter.string(from: newStartDate),
+                "fechaVencimiento": DateFormatter.membershipFormatter.string(from: newEndDate),
+                "diasRestantes": preservedDays, // ✅ Restaurar días preservados
+                "fechaUltimaModificacion": Timestamp(date: Date())
+            ])
+            
+            print("✅ Membresía reactivada con \(preservedDays) días restaurados")
+            
+            // 5. Enviar notificación de reactivación
+            await sendReactivationNotification(userEmail: userEmail, userName: userEmail.components(separatedBy: "@").first ?? "Usuario", daysRestored: preservedDays)
             
         } catch {
             await MainActor.run {
-                errorMessage = "Error al cambiar estado de membresía: \(error.localizedDescription)"
-                print("❌ Error cambiando estado de membresía: \(error.localizedDescription)")
+                errorMessage = "Error al reactivar membresía: \(error.localizedDescription)"
+                print("❌ Error reactivando membresía: \(error.localizedDescription)")
             }
+        }
+    }
+    
+    func suspendMembershipPreservingDays(membershipId: String, userEmail: String) async {
+        do {
+            // 1. Obtener datos actuales de la membresía
+            let document = try await db.collection("membresias").document(membershipId).getDocument()
+            
+            guard document.exists, let data = document.data() else {
+                print("❌ No se encontró la membresía para suspender")
+                return
+            }
+            
+            // 2. Obtener días restantes actuales ANTES de suspender
+            let currentDaysRemaining = data["diasRestantes"] as? Int ?? 0
+            let currentStartDate = data["fechaInicio"] as? String ?? ""
+            let currentEndDate = data["fechaVencimiento"] as? String ?? ""
+            
+            print("🔄 SUSPENDIENDO MEMBRESÍA:")
+            print("====================================")
+            print("📧 Email: \(userEmail)")
+            print("📅 Días restantes preservados: \(currentDaysRemaining)")
+            print("📅 Fecha inicio preservada: \(currentStartDate)")
+            print("📅 Fecha fin preservada: \(currentEndDate)")
+            print("====================================")
+            
+            // 3. Suspender SIN modificar los días restantes
+            try await db.collection("membresias").document(membershipId).updateData([
+                "activa": false,
+                "estadoDescripcion": "Suspendida",
+                "fechaSuspension": Timestamp(date: Date()),
+                // ✅ PRESERVAR estos campos importantes:
+                "diasRestantesAntesSuspension": currentDaysRemaining, // Backup
+                "fechaInicioOriginal": currentStartDate, // Backup
+                "fechaVencimientoOriginal": currentEndDate, // Backup
+                // ✅ NO modificar diasRestantes - se mantiene igual
+                "motivoSuspension": "Suspendida por administrador",
+                "fechaUltimaModificacion": Timestamp(date: Date())
+            ])
+            
+            print("✅ Membresía suspendida PRESERVANDO \(currentDaysRemaining) días")
+            
+            // 4. Enviar notificación de suspensión
+            await sendSuspensionNotification(userEmail: userEmail, userName: userEmail.components(separatedBy: "@").first ?? "Usuario")
+            
+        } catch {
+            await MainActor.run {
+                errorMessage = "Error al suspender membresía: \(error.localizedDescription)"
+                print("❌ Error suspendiendo membresía: \(error.localizedDescription)")
+            }
+        }
+    }
+    
+    func toggleMembershipStatus(membershipId: String, userEmail: String, currentStatus: Bool) async {
+        if currentStatus {
+            // Si está activa, suspender preservando días
+            await suspendMembershipPreservingDays(membershipId: membershipId, userEmail: userEmail)
+        } else {
+            // Si está suspendida, reactivar con días preservados
+            await reactivateMembershipPreservingDays(membershipId: membershipId, userEmail: userEmail)
+        }
+    }
+
+    // ✅ FUNCIÓN 4: Notificación de suspensión
+    private func sendSuspensionNotification(userEmail: String, userName: String) async {
+        do {
+            let snapshot = try await db.collection("usuarios")
+                .whereField("email", isEqualTo: userEmail)
+                .getDocuments()
+            
+            guard let userDoc = snapshot.documents.first,
+                  let fcmToken = userDoc.data()["fcmToken"] as? String,
+                  let userName = userDoc.data()["nombre"] as? String else {
+                print("❌ No se encontró FCM token para notificación de suspensión")
+                return
+            }
+            
+            let title = "⏸️ Membresía Suspendida"
+            let body = "Hola \(userName), tu membresía ha sido suspendida temporalmente. Tus días restantes se mantendrán cuando sea reactivada. Contacta al gimnasio para más información."
+            
+            await FCMNotificationManager.shared.sendNotificationToUser(
+                userId: userDoc.documentID,
+                title: title,
+                body: body,
+                data: [
+                    "type": "membership_suspended",
+                    "action": "contact_gym",
+                    "timestamp": "\(Date().timeIntervalSince1970)"
+                ],
+                directToken: fcmToken
+            )
+            
+        } catch {
+            print("❌ Error enviando notificación de suspensión: \(error.localizedDescription)")
+        }
+    }
+
+    // ✅ FUNCIÓN 5: Notificación de reactivación
+    private func sendReactivationNotification(userEmail: String, userName: String, daysRestored: Int) async {
+        do {
+            let snapshot = try await db.collection("usuarios")
+                .whereField("email", isEqualTo: userEmail)
+                .getDocuments()
+            
+            guard let userDoc = snapshot.documents.first,
+                  let fcmToken = userDoc.data()["fcmToken"] as? String,
+                  let userName = userDoc.data()["nombre"] as? String else {
+                print("❌ No se encontró FCM token para notificación de reactivación")
+                return
+            }
+            
+            let title = "🎉 ¡Membresía Reactivada!"
+            let body = "¡Hola \(userName)! Tu membresía ha sido reactivada con \(daysRestored) días restaurados. ¡Ya puedes volver a entrenar!"
+            
+            await FCMNotificationManager.shared.sendNotificationToUser(
+                userId: userDoc.documentID,
+                title: title,
+                body: body,
+                data: [
+                    "type": "membership_reactivated",
+                    "days_restored": "\(daysRestored)",
+                    "timestamp": "\(Date().timeIntervalSince1970)"
+                ],
+                directToken: fcmToken
+            )
+            
+        } catch {
+            print("❌ Error enviando notificación de reactivación: \(error.localizedDescription)")
         }
     }
     
@@ -2192,12 +2315,15 @@ class MembershipDayTracker: ObservableObject {
     }
     
     func updateAllMembershipDays() async {
-        print("🔄 Actualizando días restantes de todas las membresías...")
+        print("🔄 Actualizando días restantes (solo membresías ACTIVAS)...")
         
         do {
+            // ✅ IMPORTANTE: Solo obtener membresías ACTIVAS
             let snapshot = try await db.collection("membresias")
-                .whereField("activa", isEqualTo: true)
+                .whereField("activa", isEqualTo: true) // ✅ Solo las activas
                 .getDocuments()
+            
+            print("📊 Membresías activas encontradas: \(snapshot.documents.count)")
             
             for document in snapshot.documents {
                 let data = document.data()
@@ -2214,12 +2340,16 @@ class MembershipDayTracker: ObservableObject {
                 let currentDays = data["diasRestantes"] as? Int
                 if currentDays != daysRemaining {
                     
-                    var updateData: [String: Any] = ["diasRestantes": daysRemaining]
+                    var updateData: [String: Any] = [
+                        "diasRestantes": daysRemaining,
+                        "fechaUltimaActualizacionDias": Timestamp(date: Date())
+                    ]
                     
                     // Si la membresía expiró, desactivarla
                     if daysRemaining <= 0 {
                         updateData["activa"] = false
                         updateData["estadoDescripcion"] = "Expirada"
+                        updateData["fechaExpiracion"] = Timestamp(date: Date())
                         
                         print("⏰ Membresía expirada: \(data["email"] as? String ?? "unknown")")
                         
@@ -2228,11 +2358,27 @@ class MembershipDayTracker: ObservableObject {
                            let userUID = data["userUID"] as? String {
                             await sendExpirationNotification(userUID: userUID, email: email)
                         }
+                    } else {
+                        print("📅 Actualizado \(data["email"] as? String ?? "unknown"): \(daysRemaining) días restantes")
                     }
                     
                     try await document.reference.updateData(updateData)
-                    print("📅 Actualizado \(data["email"] as? String ?? "unknown"): \(daysRemaining) días")
                 }
+            }
+            
+            // ✅ NUEVO: Verificar membresías suspendidas (para logging)
+            let suspendedSnapshot = try await db.collection("membresias")
+                .whereField("activa", isEqualTo: false)
+                .whereField("estadoDescripcion", isEqualTo: "Suspendida")
+                .getDocuments()
+            
+            print("⏸️ Membresías suspendidas (días preservados): \(suspendedSnapshot.documents.count)")
+            
+            for suspendedDoc in suspendedSnapshot.documents {
+                let suspendedData = suspendedDoc.data()
+                let preservedDays = suspendedData["diasRestantes"] as? Int ?? 0
+                let email = suspendedData["email"] as? String ?? "unknown"
+                print("⏸️ \(email): \(preservedDays) días preservados")
             }
             
         } catch {
@@ -2306,6 +2452,13 @@ struct MembershipData: Identifiable, Codable {
     let adminActivador: String?
     let fechaUltimaModificacion: Date?
     
+    let fechaSuspension: Date?
+    let fechaReactivacion: Date?
+    let diasRestantesAntesSuspension: Int?
+    let fechaInicioOriginal: String?
+    let fechaVencimientoOriginal: String?
+    let motivoSuspension: String?
+    
     init(from document: QueryDocumentSnapshot) {
         let data = document.data()
         
@@ -2334,6 +2487,13 @@ struct MembershipData: Identifiable, Codable {
         self.notasActivacion = data["notasActivacion"] as? String
         self.adminActivador = data["adminActivador"] as? String
         self.fechaUltimaModificacion = (data["fechaUltimaModificacion"] as? Timestamp)?.dateValue()
+        
+        self.fechaSuspension = (data["fechaSuspension"] as? Timestamp)?.dateValue()
+        self.fechaReactivacion = (data["fechaReactivacion"] as? Timestamp)?.dateValue()
+        self.diasRestantesAntesSuspension = data["diasRestantesAntesSuspension"] as? Int
+        self.fechaInicioOriginal = data["fechaInicioOriginal"] as? String
+        self.fechaVencimientoOriginal = data["fechaVencimientoOriginal"] as? String
+        self.motivoSuspension = data["motivoSuspension"] as? String
     }
 }
 
@@ -2352,6 +2512,25 @@ extension MembershipData {
         case 365: return "1 año"
         default: return "\(duracion) días"
         }
+    }
+    
+    var isSuspended: Bool {
+        return !activa && estadoDescripcion == "Suspendida"
+    }
+
+    var preservedDays: Int {
+        // Si está suspendida, mostrar los días que tenía antes de suspender
+        if isSuspended {
+            return diasRestantesAntesSuspension ?? diasRestantes ?? 0
+        }
+        return diasRestantes ?? 0
+    }
+
+    var statusDisplayText: String {
+        if isSuspended {
+            return "Suspendida (\(preservedDays) días preservados)"
+        }
+        return estadoDescripcion
     }
     
     var isExpiringSoon: Bool {
@@ -2552,11 +2731,27 @@ struct AdminMembershipRowWithCustomDays: View {
     
     private var daysInfo: some View {
         HStack(spacing: 8) {
-            if membership.activa, let dias = membership.diasRestantes {
-                infoLabel(icon: "clock", text: "\(dias) días restantes", color: .brandLight.opacity(0.8))
+            if membership.isSuspended {
+                // ✅ Mostrar días preservados para suspendidas
+                infoLabel(
+                    icon: "clock.badge.checkmark",
+                    text: "\(membership.preservedDays) días preservados",
+                    color: .orange.opacity(0.8)
+                )
+            } else if membership.activa, let dias = membership.diasRestantes {
+                infoLabel(
+                    icon: "clock",
+                    text: "\(dias) días restantes",
+                    color: .brandLight.opacity(0.8)
+                )
             }
+            
             if let duracion = membership.duracionDias {
-                infoLabel(icon: "calendar", text: "\(duracion)d total", color: .brandGold.opacity(0.7))
+                infoLabel(
+                    icon: "calendar",
+                    text: "\(duracion)d total",
+                    color: .brandGold.opacity(0.7)
+                )
             }
         }
     }
@@ -2596,7 +2791,9 @@ struct AdminMembershipRowWithCustomDays: View {
     
     private var actionButton: some View {
         Group {
-            if membership.activa {
+            if membership.isSuspended {
+                reactivateButton
+            } else if membership.activa {
                 suspendButton
             } else {
                 activateButton
@@ -2604,11 +2801,22 @@ struct AdminMembershipRowWithCustomDays: View {
         }
     }
     
+    private var reactivateButton: some View {
+        actionStyledButton(
+            text: "Reactivar",
+            icon: "play.circle.fill",
+            bgColors: [.green, .green.opacity(0.85)],
+            loading: isToggling
+        ) {
+            Task { await reactivateMembership() }
+        }
+    }
+    
     private var suspendButton: some View {
         actionStyledButton(
             text: "Suspender",
             icon: "pause.circle.fill",
-            bgColors: [.red, .red.opacity(0.85)],
+            bgColors: [.orange, .orange.opacity(0.85)],
             loading: isToggling
         ) {
             Task { await suspendMembership() }
@@ -2619,7 +2827,7 @@ struct AdminMembershipRowWithCustomDays: View {
         actionStyledButton(
             text: "Activar",
             icon: "calendar.badge.plus",
-            bgColors: [.green, .green.opacity(0.85)],
+            bgColors: [.blue, .blue.opacity(0.85)],
             loading: false
         ) {
             showingActivationSheet = true
@@ -2663,14 +2871,29 @@ struct AdminMembershipRowWithCustomDays: View {
     // MARK: - Actions
     private func suspendMembership() async {
         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { isToggling = true }
-        await manager.toggleMembershipStatus(
+        
+        await manager.suspendMembershipPreservingDays(
             membershipId: membership.id,
-            userEmail: membership.email,
-            currentStatus: membership.activa
+            userEmail: membership.email
         )
+        
         try? await Task.sleep(nanoseconds: 500_000_000)
         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { isToggling = false }
     }
+    
+    private func reactivateMembership() async {
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { isToggling = true }
+        
+        // ✅ Usar nueva función que restaura días preservados
+        await manager.reactivateMembershipPreservingDays(
+            membershipId: membership.id,
+            userEmail: membership.email
+        )
+        
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) { isToggling = false }
+    }
+
 }
 
 // MARK: - Fila individual de membresía para admin
@@ -4719,6 +4942,103 @@ struct UserMembershipCard: View {
             .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
     }
     
+    @ViewBuilder
+    private func suspendedMembershipView(membership: MembershipData) -> some View {
+        VStack(spacing: 16) {
+            // Icono de suspensión
+            Image(systemName: "pause.circle.fill")
+                .font(.system(size: 40))
+                .foregroundColor(.orange)
+                .symbolEffect(.pulse, options: .repeating)
+            
+            VStack(spacing: 8) {
+                Text("Membresía Suspendida")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.orange)
+                
+                Text("Tu membresía está temporalmente suspendida")
+                    .font(.caption)
+                    .foregroundColor(.brandLight.opacity(0.7))
+                    .multilineTextAlignment(.center)
+            }
+            
+            // ✅ MOSTRAR DÍAS PRESERVADOS
+            VStack(spacing: 12) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Días Preservados")
+                            .font(.caption)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock.badge.checkmark")
+                                .foregroundColor(.orange)
+                                .font(.caption)
+                            
+                            Text("\(membership.preservedDays)")
+                                .font(.title3)
+                                .fontWeight(.bold)
+                                .foregroundColor(.orange)
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("Estado")
+                            .font(.caption)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        
+                        Text("Suspendida")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.orange)
+                    }
+                }
+                
+                // Información adicional
+                if let fechaSuspension = membership.fechaSuspension {
+                    HStack {
+                        Text("Suspendida el:")
+                            .font(.caption)
+                            .foregroundColor(.brandLight.opacity(0.7))
+                        Spacer()
+                        Text(DateFormatter.membershipFormatter.string(from: fechaSuspension))
+                            .font(.caption)
+                            .foregroundColor(.brandLight)
+                    }
+                }
+                
+                // Mensaje informativo
+                Text("Cuando se reactive tu membresía, continuarás con \(membership.preservedDays) días disponibles.")
+                    .font(.caption2)
+                    .foregroundColor(.brandLight.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .padding(8)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(8)
+            }
+            
+            // Botón de contacto
+            Button(action: {
+                makePhoneCall()
+            }) {
+                HStack {
+                    Image(systemName: "phone.fill")
+                    Text("Contactar para Reactivar")
+                        .fontWeight(.semibold)
+                }
+                .foregroundColor(.brandBlack)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity)
+                .background(Color.orange.opacity(0.8))
+                .cornerRadius(8)
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
     // MARK: - Debug Section
     @ViewBuilder
     private var debugSection: some View {
@@ -4877,15 +5197,20 @@ struct UserMembershipCard: View {
     
     @ViewBuilder
     private func membershipContentView(_ membership: MembershipData) -> some View {
-        if membership.activa {
-            let _ = print("🎨 ✅ MOSTRANDO VISTA DE MEMBRESÍA ACTIVA")
+        if membership.isSuspended {
+            // ✅ NUEVA: Vista específica para suspendidas
+            suspendedMembershipView(membership: membership)
+                .transition(.asymmetric(
+                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                    removal: .move(edge: .leading).combined(with: .opacity)
+                ))
+        } else if membership.activa {
             activeMembershipView(membership: membership)
                 .transition(.asymmetric(
                     insertion: .move(edge: .leading).combined(with: .opacity),
                     removal: .move(edge: .trailing).combined(with: .opacity)
                 ))
         } else {
-            let _ = print("🎨 ⚠️ MOSTRANDO VISTA DE MEMBRESÍA INACTIVA")
             inactiveMembershipView(membership: membership)
                 .transition(.asymmetric(
                     insertion: .move(edge: .trailing).combined(with: .opacity),
