@@ -3026,6 +3026,17 @@ struct RevenueDashboard: View {
                 
                 Spacer()
                 
+                // ✅ BOTÓN DE RECARGA MANUAL
+                Button(action: {
+                    Task {
+                        await revenueManager.forceReload()
+                    }
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                        .foregroundColor(.brandGold)
+                        .font(.caption)
+                }
+                
                 // Selector de período
                 Picker("Período", selection: $selectedPeriod) {
                     ForEach(periods.keys.sorted(), id: \.self) { key in
@@ -3034,6 +3045,18 @@ struct RevenueDashboard: View {
                 }
                 .pickerStyle(SegmentedPickerStyle())
                 .frame(width: 200)
+            }
+            
+            // ✅ MOSTRAR LOADING STATE
+            if revenueManager.isLoading {
+                HStack {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .brandGold))
+                        .scaleEffect(0.8)
+                    Text("Actualizando...")
+                        .font(.caption)
+                        .foregroundColor(.brandLight.opacity(0.7))
+                }
             }
             
             // Estadísticas principales
@@ -3056,10 +3079,18 @@ struct RevenueDashboard: View {
             // Lista de transacciones recientes
             if !revenueManager.transactions.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Transacciones Recientes")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.brandGold)
+                    HStack {
+                        Text("Transacciones Recientes")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.brandGold)
+                        
+                        Spacer()
+                        
+                        Text("\(revenueManager.transactions.count) total")
+                            .font(.caption2)
+                            .foregroundColor(.brandLight.opacity(0.6))
+                    }
                     
                     LazyVStack(spacing: 8) {
                         ForEach(Array(revenueManager.transactions.prefix(5))) { transaction in
@@ -3077,9 +3108,12 @@ struct RevenueDashboard: View {
                 .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
         )
         .onAppear {
-            Task {
-                await revenueManager.loadTransactions()
-            }
+            // ✅ INICIAR LISTENER EN TIEMPO REAL
+            revenueManager.startRealtimeTransactionListener()
+        }
+        .onDisappear {
+            // ✅ LIMPIAR LISTENER AL SALIR
+            revenueManager.stopRealtimeListener()
         }
     }
 }
@@ -6047,6 +6081,7 @@ struct AdminDashboard: View {
                 dashboardManager.loadDashboardData()
                 // ✅ IMPORTANTE: Inicializar sistema de recordatorios
                 PaymentReminderManager.shared.startMonitoring()
+                RevenueManager.shared.startRealtimeTransactionListener()
             }
             .preferredColorScheme(.dark)
         }
@@ -6098,6 +6133,7 @@ struct AdminDashboard: View {
             dashboardManager.loadDashboardData()
             // ✅ IMPORTANTE: Inicializar sistema de recordatorios
             PaymentReminderManager.shared.startMonitoring()
+            RevenueManager.shared.startRealtimeTransactionListener()
         }
         .preferredColorScheme(.dark)
     }
@@ -7002,10 +7038,99 @@ class RevenueManager: ObservableObject {
     @Published var isLoading = false
     
     private let db = Firestore.firestore()
+    private var transactionsListener: ListenerRegistration?
     
     private init() {}
     
-    // MARK: - Registrar nueva transacción
+    // ✅ NUEVA FUNCIÓN: Configurar listener en tiempo real
+    func startRealtimeTransactionListener() {
+        print("🔄 Iniciando listener de transacciones en tiempo real...")
+        
+        // Limpiar listener anterior si existe
+        transactionsListener?.remove()
+        
+        isLoading = true
+        
+        transactionsListener = db.collection("revenue_transactions")
+            .order(by: "createdDate", descending: true)
+            .addSnapshotListener { [weak self] snapshot, error in
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("❌ Error en listener de transacciones: \(error.localizedDescription)")
+                        self?.isLoading = false
+                        return
+                    }
+                    
+                    guard let snapshot = snapshot else {
+                        print("⚠️ Snapshot de transacciones vacío")
+                        self?.isLoading = false
+                        return
+                    }
+                    
+                    print("📥 LISTENER TRANSACCIONES - Docs: \(snapshot.documents.count)")
+                    print("🔄 Cambios detectados: \(snapshot.documentChanges.count)")
+                    
+                    // Procesar cambios
+                    for change in snapshot.documentChanges {
+                        switch change.type {
+                        case .added:
+                            print("✅ Nueva transacción detectada: \(change.document.documentID)")
+                        case .modified:
+                            print("🔄 Transacción modificada: \(change.document.documentID)")
+                        case .removed:
+                            print("❌ Transacción eliminada: \(change.document.documentID)")
+                        }
+                    }
+                    
+                    // Actualizar lista de transacciones
+                    self?.transactions = snapshot.documents.compactMap { TransactionData(from: $0) }
+                    
+                    // Recalcular totales
+                    self?.updateRevenueTotals()
+                    
+                    self?.isLoading = false
+                    
+                    print("💰 Totales actualizados:")
+                    print("- Total general: $\(self?.totalRevenue ?? 0)")
+                    print("- Este mes: $\(self?.monthlyRevenue ?? 0)")
+                }
+            }
+    }
+    
+    // ✅ FUNCIÓN PARA DETENER EL LISTENER
+    func stopRealtimeListener() {
+        print("🛑 Deteniendo listener de transacciones...")
+        transactionsListener?.remove()
+        transactionsListener = nil
+    }
+    
+    // ✅ MANTENER LA FUNCIÓN ORIGINAL COMO BACKUP
+    func loadTransactions() async {
+        isLoading = true
+        
+        do {
+            let snapshot = try await db.collection("revenue_transactions")
+                .order(by: "createdDate", descending: true)
+                .getDocuments()
+            
+            transactions = snapshot.documents.compactMap { TransactionData(from: $0) }
+            
+            await updateRevenueTotals()
+            
+        } catch {
+            print("❌ Error cargando transacciones: \(error.localizedDescription)")
+        }
+        
+        isLoading = false
+    }
+    
+    // ✅ FUNCIÓN PARA FORZAR RECARGA
+    func forceReload() async {
+        print("🔄 Forzando recarga de transacciones...")
+        await loadTransactions()
+    }
+    
+    // MARK: - Registrar nueva transacción (MANTENER IGUAL)
     func recordTransaction(
         userEmail: String,
         userName: String,
@@ -7050,8 +7175,7 @@ class RevenueManager: ObservableObject {
             print("👤 Usuario: \(userName) (\(userEmail))")
             print("🎯 Tipo: \(transactionType)")
             
-            // Actualizar totales
-            await updateRevenueTotals()
+            // ✅ NO NECESITAMOS updateRevenueTotals aquí porque el listener lo hará automáticamente
             
             return true
         } catch {
@@ -7060,28 +7184,8 @@ class RevenueManager: ObservableObject {
         }
     }
     
-    // MARK: - Cargar transacciones
-    func loadTransactions() async {
-        isLoading = true
-        
-        do {
-            let snapshot = try await db.collection("revenue_transactions")
-                .order(by: "createdDate", descending: true)
-                .getDocuments()
-            
-            transactions = snapshot.documents.compactMap { TransactionData(from: $0) }
-            
-            await updateRevenueTotals()
-            
-        } catch {
-            print("❌ Error cargando transacciones: \(error.localizedDescription)")
-        }
-        
-        isLoading = false
-    }
-    
-    // MARK: - Actualizar totales de ingresos
-    private func updateRevenueTotals() async {
+    // ✅ CAMBIAR A FUNCIÓN SÍNCRONA
+    private func updateRevenueTotals() {
         totalRevenue = transactions.reduce(0) { $0 + $1.amount }
         
         // Calcular ingresos del mes actual
@@ -7098,14 +7202,13 @@ class RevenueManager: ObservableObject {
         print("📅 Ingresos del mes: $\(monthlyRevenue)")
     }
     
-    // MARK: - Obtener estadísticas por período
+    // ✅ RESTO DE FUNCIONES IGUAL...
     func getRevenueBetween(startDate: Date, endDate: Date) -> Double {
         return transactions.filter { transaction in
             transaction.createdDate >= startDate && transaction.createdDate <= endDate
         }.reduce(0) { $0 + $1.amount }
     }
     
-    // MARK: - Obtener transacciones por método de pago
     func getTransactionsByPaymentMethod() -> [String: Double] {
         var result: [String: Double] = [:]
         
