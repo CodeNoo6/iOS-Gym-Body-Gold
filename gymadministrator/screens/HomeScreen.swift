@@ -6236,6 +6236,93 @@ struct UserProfileView: View {
     @EnvironmentObject var authManager: AuthManager
     @State private var editableUser: UserData?
     @State private var isEditing = false
+    @State private var errorMessage = ""
+    
+    @State private var idTipoDocumento = 1
+    @State private var idGenero = 1
+    @State private var fechaNacimiento = Date()
+    
+    let tiposDocumento = [
+            (1, "CC"),
+            (2, "CE"),
+            (3, "TI"),
+            (4, "PA"),
+            (5, "NIT"),
+            (6, "RC")
+        ]
+        
+        let generos = [
+            (1, "Masculino"),
+            (2, "Femenino")
+        ]
+    
+    private var calculatedAge: Int {
+            fechaNacimiento.calculateAge()
+        }
+    
+    private func validateProfileFields() -> (isValid: Bool, errorMessage: String) {
+        guard let userData = editableUser else {
+            return (false, "❌ Error cargando datos del usuario")
+        }
+        
+        // Validar nombres
+        if userData.nombre.isEmpty {
+            return (false, "❌ El nombre es requerido")
+        }
+        
+        if userData.nombre.count < 2 {
+            return (false, "❌ El nombre debe tener al menos 2 caracteres")
+        }
+        
+        if userData.apellido.isEmpty {
+            return (false, "❌ El apellido es requerido")
+        }
+        
+        if userData.apellido.count < 2 {
+            return (false, "❌ El apellido debe tener al menos 2 caracteres")
+        }
+        
+        // Validar teléfono
+        if userData.telefono.isEmpty {
+            return (false, "❌ El teléfono es requerido")
+        }
+        
+        if userData.telefono.count < 7 {
+            return (false, "❌ El teléfono debe tener al menos 7 dígitos")
+        }
+        
+        // ✅ VALIDACIÓN DE EDAD CALCULADA
+        if calculatedAge < 10 {
+            return (false, "❌ Debes tener al menos 10 años")
+        }
+        
+        if calculatedAge > 100 {
+            return (false, "❌ Por favor, verifica tu fecha de nacimiento")
+        }
+        
+        // Validar campos opcionales si están llenos
+        if let peso = userData.peso, !peso.isEmpty {
+            if let pesoNum = Double(peso) {
+                if pesoNum < 20 || pesoNum > 300 {
+                    return (false, "❌ El peso debe estar entre 20 y 300 kg")
+                }
+            } else {
+                return (false, "❌ El peso debe ser un número válido")
+            }
+        }
+        
+        if let estatura = userData.estatura, !estatura.isEmpty {
+            if let estaturaNum = Int(estatura) {
+                if estaturaNum < 100 || estaturaNum > 250 {
+                    return (false, "❌ La estatura debe estar entre 100 y 250 cm")
+                }
+            } else {
+                return (false, "❌ La estatura debe ser un número válido")
+            }
+        }
+        
+        return (true, "")
+    }
 
     var body: some View {
         NavigationView {
@@ -6266,32 +6353,134 @@ struct UserProfileView: View {
                                 CustomTextField(
                                     placeholder: "Nombre",
                                     text: Binding(
-                                        get: { userData.nombre },
-                                        set: { editableUser?.nombre = $0 }
+                                        get: { editableUser?.nombre ?? "" },
+                                        set: { newValue in
+                                            editableUser?.nombre = newValue
+                                            print("🔄 Nombre actualizado a: \(newValue)") // Debug temporal
+                                        }
                                     ),
-                                    icon: "person.fill"
+                                    icon: "person.fill",
+                                    keyboardType: .default,
+                                    inputFilter: .lettersAndSpaces,
+                                    maxLength: 30
                                 )
                                 .disabled(!isEditing)
 
                                 CustomTextField(
                                     placeholder: "Apellido",
                                     text: Binding(
-                                        get: { userData.apellido },
-                                        set: { editableUser?.apellido = $0 }
+                                        get: { editableUser?.apellido ?? "" },
+                                        set: { newValue in
+                                            editableUser?.apellido = newValue
+                                            print("🔄 Apellido actualizado a: \(newValue)") // Debug temporal
+                                        }
                                     ),
-                                    icon: "person.fill"
+                                    icon: "person.fill",
+                                    keyboardType: .default,
+                                    inputFilter: .lettersAndSpaces,
+                                    maxLength: 30
                                 )
                                 .disabled(!isEditing)
+
+                                if isEditing {
+                                    CustomPicker(
+                                        placeholder: "Tipo de Documento",
+                                        icon: "doc.text.fill",
+                                        selection: $idTipoDocumento,
+                                        options: tiposDocumento
+                                    )
+                                } else {
+                                    CustomTextField(
+                                        placeholder: "Tipo de Documento",
+                                        text: .constant(tiposDocumento.first { $0.0 == userData.idTipoDocumento }?.1 ?? "CC"),
+                                        icon: "doc.text.fill"
+                                    )
+                                    .disabled(true)
+                                }
+
+                                CustomTextField(
+                                    placeholder: "Número de Documento",
+                                    text: Binding(
+                                        get: { editableUser?.numeroDocumento ?? "" },
+                                        set: { newValue in
+                                            editableUser?.numeroDocumento = newValue
+                                        }
+                                    ),
+                                    icon: "number.circle.fill",
+                                    keyboardType: .numberPad,
+                                    inputFilter: .numbersOnly,
+                                    maxLength: 15
+                                )
+                                .disabled(!isEditing)
+
+                                // ✅ NUEVO: Date picker para fecha de nacimiento
+                                if isEditing {
+                                    CustomDatePicker(
+                                        placeholder: "Fecha de Nacimiento",
+                                        icon: "calendar.circle.fill",
+                                        date: $fechaNacimiento
+                                    )
+                                    
+                                    // ✅ NUEVO: Mostrar edad calculada
+                                    CalculatedAgeDisplay(birthDate: fechaNacimiento)
+                                        .animation(.easeInOut(duration: 0.3), value: fechaNacimiento)
+                                } else {
+                                    CustomTextField(
+                                        placeholder: "Fecha de Nacimiento",
+                                        text: .constant(DateFormatter.localizedString(from: userData.fechaNacimiento, dateStyle: .medium, timeStyle: .none)),
+                                        icon: "calendar.circle.fill"
+                                    )
+                                    .disabled(true)
+                                }
+
+                                // ✅ NUEVO: Picker para género
+                                if isEditing {
+                                    CustomSegmentedPicker(
+                                        placeholder: "Género",
+                                        icon: "person.2.fill",
+                                        selection: $idGenero,
+                                        options: generos
+                                    )
+                                } else {
+                                    CustomTextField(
+                                        placeholder: "Género",
+                                        text: .constant(generos.first { $0.0 == userData.idGenero }?.1 ?? "Masculino"),
+                                        icon: "person.2.fill"
+                                    )
+                                    .disabled(true)
+                                }
 
                                 CustomTextField(
                                     placeholder: "Nombre de Usuario",
                                     text: Binding(
-                                        get: { userData.displayName },
-                                        set: { editableUser?.displayName = $0 }
+                                        get: { editableUser?.displayName ?? "" },
+                                        set: { newValue in
+                                            editableUser?.displayName = newValue
+                                        }
                                     ),
                                     icon: "at.circle.fill"
                                 )
                                 .disabled(!isEditing)
+                                
+                                if !errorMessage.isEmpty {
+                                    HStack {
+                                        Image(systemName: errorMessage.contains("✅") ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                                            .foregroundColor(errorMessage.contains("✅") ? .brandSuccess : .brandError)
+                                        
+                                        Text(errorMessage)
+                                            .foregroundColor(errorMessage.contains("✅") ? .brandSuccess : .brandError)
+                                            .font(.caption)
+                                        
+                                        Spacer()
+                                    }
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 10)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 10)
+                                            .fill((errorMessage.contains("✅") ? Color.brandSuccess : Color.brandError).opacity(0.1))
+                                    )
+                                    .transition(.move(edge: .top).combined(with: .opacity))
+                                }
                             }
 
                             // Sección Contacto
@@ -6299,57 +6488,47 @@ struct UserProfileView: View {
                                 CustomTextField(
                                     placeholder: "Teléfono",
                                     text: Binding(
-                                        get: { userData.telefono },
-                                        set: { editableUser?.telefono = $0 }
+                                        get: { editableUser?.telefono ?? "" },
+                                        set: { newValue in
+                                            editableUser?.telefono = newValue
+                                        }
                                     ),
                                     icon: "phone.fill",
-                                    keyboardType: .phonePad
-                                )
-                                .disabled(!isEditing)
-
-                                CustomTextField(
-                                    placeholder: "Dirección",
-                                    text: Binding(
-                                        get: { userData.direccion },
-                                        set: { editableUser?.direccion = $0 }
-                                    ),
-                                    icon: "house.fill"
+                                    keyboardType: .phonePad,
+                                    inputFilter: .numbersOnly,
+                                    maxLength: 12
                                 )
                                 .disabled(!isEditing)
                             }
 
-                            // Sección Datos Físicos
                             profileSection(title: "Datos Físicos") {
-                                CustomTextField(
-                                    placeholder: "Edad",
-                                    text: Binding(
-                                        get: { userData.edad ?? "" },
-                                        set: { editableUser?.edad = $0 }
-                                    ),
-                                    icon: "calendar",
-                                    keyboardType: .numberPad
-                                )
-                                .disabled(!isEditing)
-
                                 CustomTextField(
                                     placeholder: "Peso (kg)",
                                     text: Binding(
-                                        get: { userData.peso ?? "" },
-                                        set: { editableUser?.peso = $0 }
+                                        get: { editableUser?.peso ?? "" },
+                                        set: { newValue in
+                                            editableUser?.peso = newValue.isEmpty ? nil : newValue
+                                        }
                                     ),
                                     icon: "scalemass",
-                                    keyboardType: .decimalPad
+                                    keyboardType: .decimalPad,
+                                    inputFilter: .decimal,
+                                    maxLength: 6
                                 )
                                 .disabled(!isEditing)
 
                                 CustomTextField(
                                     placeholder: "Estatura (cm)",
                                     text: Binding(
-                                        get: { userData.estatura ?? "" },
-                                        set: { editableUser?.estatura = $0 }
+                                        get: { editableUser?.estatura ?? "" },
+                                        set: { newValue in
+                                            editableUser?.estatura = newValue.isEmpty ? nil : newValue
+                                        }
                                     ),
                                     icon: "ruler",
-                                    keyboardType: .decimalPad
+                                    keyboardType: .numberPad,
+                                    inputFilter: .numbersOnly,
+                                    maxLength: 3
                                 )
                                 .disabled(!isEditing)
                             }
@@ -6372,10 +6551,59 @@ struct UserProfileView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     if isEditing {
                         Button("Guardar") {
+                            // ✅ Debug para ver qué datos se van a enviar
+                            print("🔍 DATOS ANTES DE GUARDAR:")
+                            if let user = editableUser {
+                                print("- Nombre: '\(user.nombre)'")
+                                print("- Apellido: '\(user.apellido)'")
+                                print("- Teléfono: '\(user.telefono)'")
+                                print("- Tipo Doc: \(user.idTipoDocumento) -> \(idTipoDocumento)")
+                                print("- Género: \(user.idGenero) -> \(idGenero)")
+                                print("- Fecha Nac: \(user.fechaNacimiento) -> \(fechaNacimiento)")
+                            }
+                            
+                            // Validar antes de guardar
+                            let validation = validateProfileFields()
+                            if !validation.isValid {
+                                errorMessage = validation.errorMessage
+                                return
+                            }
+                            
+                            // Limpiar mensaje de error
+                            errorMessage = ""
+                            
                             Task {
-                                if let updated = editableUser {
+                                if var updated = editableUser {
+                                    // ✅ Actualizar con los valores de los pickers
+                                    updated.idTipoDocumento = idTipoDocumento
+                                    updated.idGenero = idGenero
+                                    updated.fechaNacimiento = fechaNacimiento
+                                    updated.edad = fechaNacimiento.calculateAgeString()
+                                    
+                                    print("🚀 ENVIANDO DATOS ACTUALIZADOS:")
+                                    print("- Nombre: '\(updated.nombre)'")
+                                    print("- Apellido: '\(updated.apellido)'")
+                                    print("- Teléfono: '\(updated.telefono)'")
+                                    print("- Edad calculada: '\(updated.edad ?? "nil")'")
+                                    
+                                    // Llamar a la función de actualización
                                     await authManager.updateUserData(updated)
-                                    isEditing = false
+                                    
+                                    await MainActor.run {
+                                        // ✅ VERIFICAR SI LA ACTUALIZACIÓN FUE EXITOSA
+                                        if authManager.errorMessage.isEmpty {
+                                            // ✅ ÉXITO: Actualizar la vista
+                                            errorMessage = "✅ Perfil actualizado exitosamente"
+                                            editableUser = authManager.currentUserData // Actualizar con los datos guardados
+                                            isEditing = false
+                                            
+                                            print("✅ Actualización completada exitosamente")
+                                        } else {
+                                            // ❌ ERROR: Mostrar el error
+                                            errorMessage = authManager.errorMessage
+                                            print("❌ Error en actualización: \(authManager.errorMessage)")
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -6383,6 +6611,7 @@ struct UserProfileView: View {
                     } else {
                         Button("Editar") {
                             isEditing = true
+                            errorMessage = ""
                         }
                     }
                 }
@@ -6390,6 +6619,10 @@ struct UserProfileView: View {
             .onAppear {
                 if editableUser == nil, let current = authManager.currentUserData {
                     editableUser = current
+                    
+                    idTipoDocumento = current.idTipoDocumento
+                    idGenero = current.idGenero
+                    fechaNacimiento = current.fechaNacimiento
                 }
             }
             .preferredColorScheme(.dark)

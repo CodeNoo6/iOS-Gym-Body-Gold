@@ -944,7 +944,6 @@ struct LoginView: View {
     @EnvironmentObject var authManager: AuthManager
     @State private var email = ""
     @State private var password = ""
-    @State private var displayName = ""
     @State private var isSignUp = false
     @State private var showForgotPassword = false
     @State private var showPassword = false
@@ -956,7 +955,6 @@ struct LoginView: View {
     @State private var apellido = ""
     @State private var telefono = ""
     @State private var fechaNacimiento = Date()
-    @State private var direccion = ""
     @State private var activo = true
     @State private var idGenero = 1
     
@@ -1197,12 +1195,6 @@ struct LoginView: View {
                                         maxLength: 30
                                     )
                                     
-                                    CustomTextField(
-                                        placeholder: "Nombre de Usuario",
-                                        text: $displayName,
-                                        icon: "at.circle.fill"
-                                    )
-                                    
                                     CustomDatePicker(
                                         placeholder: "Fecha de Nacimiento",
                                         icon: "calendar.circle.fill",
@@ -1243,12 +1235,6 @@ struct LoginView: View {
                                         keyboardType: .phonePad,
                                         inputFilter: .numbersOnly,
                                         maxLength: 12
-                                    )
-                                    
-                                    CustomTextField(
-                                        placeholder: "Dirección",
-                                        text: $direccion,
-                                        icon: "house.fill"
                                     )
                                 }
                                 .padding(.bottom, 10)
@@ -1376,14 +1362,14 @@ struct LoginView: View {
                                             let userData = UserData(
                                                 uid: "", // Se asignará automáticamente en signUp
                                                 email: email,
-                                                displayName: displayName,
+                                                displayName: "\(nombre) \(apellido)",
                                                 idTipoDocumento: idTipoDocumento,
                                                 numeroDocumento: numeroDocumento,
                                                 nombre: nombre,
                                                 apellido: apellido,
                                                 telefono: telefono,
                                                 fechaNacimiento: fechaNacimiento,
-                                                direccion: direccion,
+                                                direccion: "",
                                                 activo: activo,
                                                 idGenero: idGenero,
                                                 edad: nil, // ✅ SE CALCULARÁ AUTOMÁTICAMENTE EN AuthManager
@@ -1425,9 +1411,9 @@ struct LoginView: View {
                             .foregroundColor(.brandBlack)
                         }
                         .disabled(authManager.isLoading || email.isEmpty || password.isEmpty || (isSignUp && (nombre.isEmpty || apellido.isEmpty || numeroDocumento.isEmpty)))
-                        .opacity((email.isEmpty || password.isEmpty || (isSignUp && (nombre.isEmpty || apellido.isEmpty || numeroDocumento.isEmpty))) ? 0.6 : 1.0)
-                        .scaleEffect(authManager.isLoading ? 0.95 : 1.0)
-                        .animation(.spring(), value: authManager.isLoading)
+                                                .opacity((email.isEmpty || password.isEmpty || (isSignUp && (nombre.isEmpty || apellido.isEmpty || numeroDocumento.isEmpty))) ? 0.6 : 1.0)
+                                                .scaleEffect(authManager.isLoading ? 0.95 : 1.0)
+                                                .animation(.spring(), value: authManager.isLoading)
                         
                         // Link de recuperación de contraseña
                         if !isSignUp {
