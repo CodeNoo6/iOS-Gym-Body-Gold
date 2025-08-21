@@ -1644,102 +1644,185 @@
         }
         
         func activateMembershipWithCustomPriceAndHistory(
-            membershipId: String,
-            userEmail: String,
-            days: Int,
-            customPrice: Double? = nil,
-            paymentMethod: String = "efectivo",
-            notes: String? = nil,
-            adminUserId: String,
-            adminUserName: String
-        ) async {
-            do {
-                let startDate = Date()
-                let endDate = Calendar.current.date(byAdding: .day, value: days, to: startDate) ?? Date()
-                
-                // Buscar la membresía para obtener el precio original
-                let originalPrice = self.memberships.first(where: { $0.id == membershipId })?.precio ?? 0.0
-                let finalPrice = customPrice ?? originalPrice
-                
-                // 1. Actualizar membresía con precio personalizado
-                var updateData: [String: Any] = [
-                    "activa": true,
-                    "estadoDescripcion": "Activa",
-                    "fechaInicio": DateFormatter.membershipFormatter.string(from: startDate),
-                    "fechaVencimiento": DateFormatter.membershipFormatter.string(from: endDate),
-                    "diasRestantes": days,
-                    "requiereActivacion": false,
-                    "fechaActivacion": Timestamp(),
-                    "duracionDias": days,
-                    "precioFinal": finalPrice,
-                    "fechaUltimaModificacion": Timestamp(),
-                    "adminActivador": adminUserName
-                ]
-                
-                // Agregar campos de precio personalizado si aplica
-                if let customPrice = customPrice {
-                    updateData["precioPersonalizado"] = customPrice
-                    updateData["precioOriginal"] = originalPrice
-                    updateData["tieneDescuento"] = customPrice < originalPrice
-                }
-                
-                // Agregar método de pago y notas
-                updateData["metodoPago"] = paymentMethod
-                if let notes = notes, !notes.isEmpty {
-                    updateData["notasActivacion"] = notes
-                }
-                
-                try await db.collection("membresias").document(membershipId).updateData(updateData)
-                
-                print("✅ Membresía activada:")
-                print("- ID: \(membershipId)")
-                print("- Email: \(userEmail)")
-                print("- Duración: \(days) días")
-                print("- Precio original: $\(originalPrice)")
-                print("- Precio final: $\(finalPrice)")
-                print("- Método de pago: \(paymentMethod)")
-                
-                // 2. Registrar transacción en historial de ganancias
-                let userName = userEmail.components(separatedBy: "@").first ?? "Usuario"
-                
-                let success = await RevenueManager.shared.recordTransaction(
-                    userEmail: userEmail,
-                    userName: userName,
-                    membershipType: "Básica", // Podrías obtener el tipo real desde la membresía
-                    originalPrice: originalPrice,
-                    customPrice: customPrice,
-                    duration: days,
-                    transactionType: "activation",
-                    paymentMethod: paymentMethod,
-                    membershipStartDate: startDate,
-                    membershipEndDate: endDate,
-                    adminUserId: adminUserId,
-                    adminUserName: adminUserName,
-                    notes: notes
-                )
-                
-                if success {
-                    print("✅ Transacción registrada en historial de ganancias")
-                } else {
-                    print("❌ Error registrando transacción en historial")
-                }
-                
-                // 3. Enviar notificación personalizada con precio
-                await sendCustomActivationNotificationWithPrice(
-                    userEmail: userEmail,
-                    days: days,
-                    endDate: endDate,
-                    finalPrice: finalPrice,
-                    paymentMethod: paymentMethod
-                )
-                
-            } catch {
-                await MainActor.run {
-                    errorMessage = "Error al activar membresía: \(error.localizedDescription)"
-                    print("❌ Error activando membresía: \(error.localizedDescription)")
+                membershipId: String,
+                userEmail: String,
+                days: Int,
+                customPrice: Double? = nil,
+                paymentMethod: String = "efectivo",
+                notes: String? = nil,
+                adminUserId: String,
+                adminUserName: String
+            ) async {
+                do {
+                    let startDate = Date()
+                    let endDate = Calendar.current.date(byAdding: .day, value: days, to: startDate) ?? Date()
+                    
+                    // Buscar la membresía para obtener el precio original
+                    let originalPrice = self.memberships.first(where: { $0.id == membershipId })?.precio ?? 0.0
+                    
+                    // ✅ LÓGICA MEJORADA DE PRECIOS
+                    var updateData: [String: Any] = [
+                        "activa": true,
+                        "estadoDescripcion": "Activa",
+                        "fechaInicio": DateFormatter.membershipFormatter.string(from: startDate),
+                        "fechaVencimiento": DateFormatter.membershipFormatter.string(from: endDate),
+                        "diasRestantes": days,
+                        "requiereActivacion": false,
+                        "fechaActivacion": Timestamp(),
+                        "duracionDias": days,
+                        "fechaUltimaModificacion": Timestamp(),
+                        "adminActivador": adminUserName,
+                        "metodoPago": paymentMethod
+                    ]
+                    
+                    // ✅ DETERMINAR PRECIOS FINALES
+                    if let customPrice = customPrice, customPrice > 0 {
+                        // TIENE PRECIO PERSONALIZADO
+                        print("💰 Activando con PRECIO PERSONALIZADO:")
+                        print("- Precio original: $\(originalPrice)")
+                        print("- Precio personalizado: $\(customPrice)")
+                        
+                        updateData["precio"] = customPrice  // ✅ ACTUALIZAR precio base
+                        updateData["precioFinal"] = customPrice
+                        updateData["precioOriginal"] = originalPrice
+                        updateData["precioPersonalizado"] = customPrice
+                        updateData["tipoPrecio"] = "personalizado"
+                        
+                    } else {
+                        // PRECIO BASE NORMAL
+                        print("💰 Activando con PRECIO BASE:")
+                        print("- Precio base: $\(originalPrice)")
+                        
+                        updateData["precio"] = originalPrice  // ✅ MANTENER precio base
+                        updateData["precioFinal"] = originalPrice
+                        updateData["precioOriginal"] = originalPrice
+                        updateData["tipoPrecio"] = "base"
+                    }
+                    
+                    // Agregar notas si existen
+                    if let notes = notes, !notes.isEmpty {
+                        updateData["notasActivacion"] = notes
+                    }
+                    
+                    // ✅ ACTUALIZAR EN FIRESTORE
+                    try await db.collection("membresias").document(membershipId).updateData(updateData)
+                    
+                    let finalPrice = customPrice ?? originalPrice
+                    
+                    print("✅ Membresía activada exitosamente:")
+                    print("====================================")
+                    print("🆔 ID: \(membershipId)")
+                    print("📧 Email: \(userEmail)")
+                    print("📅 Duración: \(days) días")
+                    print("💰 Precio final aplicado: $\(finalPrice)")
+                    print("💳 Método de pago: \(paymentMethod)")
+                    print("🏷️ Tipo de precio: \(customPrice != nil ? "Personalizado" : "Base")")
+                    print("====================================")
+                    
+                    // ✅ REGISTRAR TRANSACCIÓN EN HISTORIAL
+                    let userName = userEmail.components(separatedBy: "@").first ?? "Usuario"
+                    
+                    let success = await RevenueManager.shared.recordTransaction(
+                        userEmail: userEmail,
+                        userName: userName,
+                        membershipType: "Básica",
+                        originalPrice: originalPrice,
+                        customPrice: customPrice,
+                        duration: days,
+                        transactionType: "activation",
+                        paymentMethod: paymentMethod,
+                        membershipStartDate: startDate,
+                        membershipEndDate: endDate,
+                        adminUserId: adminUserId,
+                        adminUserName: adminUserName,
+                        notes: notes
+                    )
+                    
+                    if success {
+                        print("✅ Transacción registrada en historial de ganancias")
+                    } else {
+                        print("❌ Error registrando transacción en historial")
+                    }
+                    
+                    // ✅ ENVIAR NOTIFICACIÓN CON INFORMACIÓN COMPLETA
+                    await sendEnhancedActivationNotificationWithPrice(
+                        userEmail: userEmail,
+                        days: days,
+                        endDate: endDate,
+                        originalPrice: originalPrice,
+                        finalPrice: finalPrice,
+                        customPrice: customPrice,
+                        paymentMethod: paymentMethod
+                    )
+                    
+                } catch {
+                    await MainActor.run {
+                        errorMessage = "Error al activar membresía: \(error.localizedDescription)"
+                        print("❌ Error activando membresía: \(error.localizedDescription)")
+                    }
                 }
             }
-        }
+        
+        private func sendEnhancedActivationNotificationWithPrice(
+                userEmail: String,
+                days: Int,
+                endDate: Date,
+                originalPrice: Double,
+                finalPrice: Double,
+                customPrice: Double? = nil,
+                paymentMethod: String
+            ) async {
+                do {
+                    let snapshot = try await db.collection("usuarios")
+                        .whereField("email", isEqualTo: userEmail)
+                        .getDocuments()
+                    
+                    guard let userDoc = snapshot.documents.first,
+                          let fcmToken = userDoc.data()["fcmToken"] as? String,
+                          let userName = userDoc.data()["nombre"] as? String else {
+                        print("❌ No se encontró FCM token para el usuario: \(userEmail)")
+                        return
+                    }
+                    
+                    let formattedDate = DateFormatter.membershipFormatter.string(from: endDate)
+                    let durationText = getDurationText(days: days)
+                    
+                    let title = "🎉 ¡Membresía Activada!"
+                    let body = """
+                    ¡Hola \(userName)! Tu membresía ha sido activada:
+                    
+                    📅 Duración: \(durationText) (\(days) días)
+                    💰 Monto: $\(Int(finalPrice).formatted())
+                    💳 Pago: \(paymentMethod.capitalized)
+                    📅 Vence: \(formattedDate)
+                    
+                    ¡Ya puedes entrenar! 💪
+                    """
+                    
+                    await FCMNotificationManager.shared.sendNotificationToUser(
+                        userId: userDoc.documentID,
+                        title: title,
+                        body: body,
+                        data: [
+                            "type": "membership_activated",
+                            "duration_days": "\(days)",
+                            "end_date": formattedDate,
+                            "final_price": "\(finalPrice)",
+                            "original_price": "\(originalPrice)",
+                            "custom_price": customPrice != nil ? "\(customPrice!)" : "null",
+                            "payment_method": paymentMethod,
+                            "price_type": customPrice != nil ? "custom" : "base",
+                            "timestamp": "\(Date().timeIntervalSince1970)"
+                        ],
+                        directToken: fcmToken
+                    )
+                    
+                    print("📱 Notificación de activación con detalles de precio enviada")
+                    
+                } catch {
+                    print("❌ Error enviando notificación: \(error.localizedDescription)")
+                }
+            }
         
         // ✅ FUNCIÓN AUXILIAR: Notificación con información de precio
         private func sendCustomActivationNotificationWithPrice(
@@ -2454,8 +2537,15 @@
         }
         
         var finalDisplayPrice: Double {
-            return precioFinal ?? precioPersonalizado ?? precio
-        }
+               // Priorizar precioFinal, luego precioPersonalizado, finalmente precio base
+               if let precioFinal = precioFinal {
+                   return precioFinal
+               } else if let precioPersonalizado = precioPersonalizado {
+                   return precioPersonalizado
+               } else {
+                   return precio
+               }
+           }
     }
 
     // MARK: - DateFormatter para membresías
@@ -3166,11 +3256,6 @@
                                 .font(.caption)
                                 .fontWeight(.bold)
                                 .foregroundColor(.brandGold)
-                            
-                            Text("(Era $\(Int(membership.precio).formatted()))")
-                                .font(.caption2)
-                                .foregroundColor(.brandLight.opacity(0.6))
-                                .strikethrough()
                         } else {
                             Text("$\(Int(membership.finalDisplayPrice).formatted())")
                                 .font(.caption)
@@ -3287,6 +3372,26 @@
                 isDirectActivating = false
                 
                 print("✅ Reactivación directa completada")
+            }
+        
+        private var enhancedPriceDisplay: some View {
+                VStack(spacing: 2) {
+                    // Precio final
+                    Text("$\(Int(membership.finalDisplayPrice).formatted())")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundColor(.brandGold)
+                    
+                    // Información adicional de precio
+                    if membership.hasCustomPrice {
+                        if let precioOriginal = membership.precioOriginal {
+                            Text("Era $\(Int(precioOriginal).formatted())")
+                                .font(.caption2)
+                                .foregroundColor(.brandLight.opacity(0.6))
+                                .strikethrough()
+                        }
+                    }
+                }
             }
         
         private func recordDirectActivationTransaction() async {
