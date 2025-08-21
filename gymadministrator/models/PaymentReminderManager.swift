@@ -202,6 +202,18 @@ class PaymentReminderManager: NSObject, ObservableObject {
             }
     }
     
+    func getMembershipsExpiringToday() -> [PaymentReminder] {
+        return upcomingPayments.filter { $0.diasRestantes == 0 }
+    }
+
+    func getMembershipsExpiringTomorrow() -> [PaymentReminder] {
+        return upcomingPayments.filter { $0.diasRestantes == 1 }
+    }
+
+    func getTotalExpiringCount() -> Int {
+        return upcomingPayments.count
+    }
+    
     // MARK: - Procesamiento de membresías activas
     private func processActiveMemberships(documents: [QueryDocumentSnapshot]) async {
         print("🔍 Procesando \(documents.count) membresías activas...")
@@ -222,22 +234,21 @@ class PaymentReminderManager: NSObject, ObservableObject {
             // Calcular días restantes
             if let diasRestantes = calculateDaysRemaining(from: fechaVencimiento) {
                 
-                // Crear recordatorio si falta 1 día
-                if diasRestantes == 1 {
-                    let reminder = PaymentReminder(
-                        id: doc.documentID,
-                        userUID: userUID,
-                        email: email,
-                        tipoMembresia: tipoMembresia,
-                        precio: precio,
-                        fechaVencimiento: fechaVencimiento,
-                        diasRestantes: diasRestantes
-                    )
-                    
-                    reminders.append(reminder)
-                    
-                    // Programar notificación
-                    await schedulePaymentNotification(for: reminder)
+                if diasRestantes == 0 || diasRestantes == 1 {
+                        let reminder = PaymentReminder(
+                            id: doc.documentID,
+                            userUID: userUID,
+                            email: email,
+                            tipoMembresia: tipoMembresia,
+                            precio: precio,
+                            fechaVencimiento: fechaVencimiento,
+                            diasRestantes: diasRestantes
+                        )
+                        
+                        reminders.append(reminder)
+                        
+                        // Programar notificación inmediata para ambos casos
+                        await schedulePaymentNotification(for: reminder)
                 }
                 
                 // También programar para mañana si faltan 2 días
@@ -384,7 +395,8 @@ class PaymentReminderManager: NSObject, ObservableObject {
     
     // MARK: - Funciones de utilidad
     func getUpcomingPaymentsCount() -> Int {
-        return upcomingPayments.count
+        // Contar membresías que expiran hoy (0 días) o mañana (1 día)
+        return upcomingPayments.filter { $0.diasRestantes <= 1 }.count
     }
     
     func getPaymentsDueTomorrow() -> [PaymentReminder] {
@@ -436,6 +448,37 @@ struct PaymentReminderDashboard: View {
                 
                 Spacer()
                 
+                let todayCount = reminderManager.getMembershipsExpiringToday().count
+                let tomorrowCount = reminderManager.getMembershipsExpiringTomorrow().count
+                let totalCount = todayCount + tomorrowCount
+                
+                if totalCount > 0 {
+                                HStack(spacing: 8) {
+                                    // Badge crítico (expiran hoy)
+                                    if todayCount > 0 {
+                                        Text("\(todayCount)")
+                                            .font(.caption)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.brandWhite)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 3)
+                                            .background(Color.red)
+                                            .cornerRadius(8)
+                                    }
+                                    
+                                    // Badge urgente (expiran mañana)
+                                    if tomorrowCount > 0 {
+                                        Text("\(tomorrowCount)")
+                                            .font(.caption)
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.brandBlack)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 3)
+                                            .background(Color.orange)
+                                            .cornerRadius(8)
+                                    }
+                                }
+                            }
                 // Badge con cantidad de pagos pendientes
                 if reminderManager.getUpcomingPaymentsCount() > 0 {
                     Text("\(reminderManager.getUpcomingPaymentsCount())")
@@ -451,26 +494,43 @@ struct PaymentReminderDashboard: View {
             
             // Lista de recordatorios activos
             if !reminderManager.upcomingPayments.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Pagos con vencimiento mañana:")
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.brandLight)
-                    
-                    ForEach(reminderManager.upcomingPayments) { reminder in
-                        PaymentReminderRow(reminder: reminder)
+                        VStack(alignment: .leading, spacing: 12) {
+                            // Críticos (expiran hoy)
+                            let todayReminders = reminderManager.getMembershipsExpiringToday()
+                            if !todayReminders.isEmpty {
+                                Text("🚨 Expiran HOY (\(todayReminders.count)):")
+                                    .font(.subheadline)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.red)
+                                
+                                ForEach(todayReminders) { reminder in
+                                    PaymentReminderRow(reminder: reminder)
+                                }
+                            }
+                            
+                            // Urgentes (expiran mañana)
+                            let tomorrowReminders = reminderManager.getMembershipsExpiringTomorrow()
+                            if !tomorrowReminders.isEmpty {
+                                Text("⏰ Expiran MAÑANA (\(tomorrowReminders.count)):")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.orange)
+                                
+                                ForEach(tomorrowReminders) { reminder in
+                                    PaymentReminderRow(reminder: reminder)
+                                }
+                            }
+                        }
+                    } else {
+                        HStack {
+                            Image(systemName: "checkmark.circle")
+                                .foregroundColor(.green)
+                            Text("No hay vencimientos urgentes")
+                                .font(.subheadline)
+                                .foregroundColor(.brandLight.opacity(0.7))
+                        }
+                        .padding(.vertical, 8)
                     }
-                }
-            } else {
-                HStack {
-                    Image(systemName: "checkmark.circle")
-                        .foregroundColor(.green)
-                    Text("No hay pagos pendientes para mañana")
-                        .font(.subheadline)
-                        .foregroundColor(.brandLight.opacity(0.7))
-                }
-                .padding(.vertical, 8)
-            }
         }
         .padding(20)
         .background(Color.brandDark)
@@ -492,41 +552,73 @@ struct PaymentReminderDashboard: View {
 struct PaymentReminderRow: View {
     let reminder: PaymentReminder
     
-    var body: some View {
-        HStack(spacing: 12) {
-            // Icono de urgencia
-            Image(systemName: reminder.isUrgent ? "exclamationmark.triangle.fill" : "clock.fill")
-                .foregroundColor(reminder.isUrgent ? .red : .orange)
-                .font(.title3)
-            
-            // Información
-            VStack(alignment: .leading, spacing: 2) {
-                Text(reminder.email)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.brandLight)
-                
-                Text("\(reminder.tipoMembresia) - \(reminder.formattedPrice)")
-                    .font(.caption)
-                    .foregroundColor(.brandGold)
+    private var urgencyColor: Color {
+            switch reminder.diasRestantes {
+            case 0: return .red
+            case 1: return .orange
+            default: return .yellow
             }
-            
-            Spacer()
-            
-            // Badge de días restantes
-            Text("\(reminder.diasRestantes) día\(reminder.diasRestantes == 1 ? "" : "s")")
-                .font(.caption2)
-                .fontWeight(.bold)
-                .foregroundColor(.brandWhite)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(reminder.isUrgent ? Color.red : Color.orange)
-                .cornerRadius(8)
         }
-        .padding(8)
-        .background(Color.brandBlack.opacity(0.3))
-        .cornerRadius(8)
-    }
+        
+        private var urgencyText: String {
+            switch reminder.diasRestantes {
+            case 0: return "¡HOY!"
+            case 1: return "Mañana"
+            default: return "\(reminder.diasRestantes) días"
+            }
+        }
+    
+    private var urgencyIcon: String {
+            switch reminder.diasRestantes {
+            case 0: return "exclamationmark.triangle.fill"
+            case 1: return "clock.badge.exclamationmark"
+            default: return "clock"
+            }
+        }
+    
+    var body: some View {
+            HStack(spacing: 12) {
+                // Icono de urgencia
+                Image(systemName: urgencyIcon)
+                    .foregroundColor(urgencyColor)
+                    .font(.title3)
+                
+                // Información
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(reminder.email)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.brandLight)
+                    
+                    Text("\(reminder.tipoMembresia) - \(reminder.formattedPrice)")
+                        .font(.caption)
+                        .foregroundColor(.brandGold)
+                    
+                    Text("Vence: \(reminder.fechaVencimiento)")
+                        .font(.caption2)
+                        .foregroundColor(.brandLight.opacity(0.6))
+                }
+                
+                Spacer()
+                
+                // Badge de urgencia
+                Text(urgencyText)
+                    .font(.caption2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.brandWhite)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(urgencyColor)
+                    .cornerRadius(8)
+            }
+            .padding(8)
+            .background(Color.brandBlack.opacity(0.3))
+            .cornerRadius(8)
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(urgencyColor.opacity(0.3), lineWidth: 1)
+            )
+        }
 }
 
 // MARK: - Extensión para integrar en el Dashboard
