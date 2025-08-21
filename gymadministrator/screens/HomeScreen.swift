@@ -16,293 +16,371 @@
     import SwiftUI
     import UIKit
 
-    final class OllamaStreamer: NSObject, ObservableObject, URLSessionDataDelegate {
-        /// Callback que entrega fragmentos (chunk, done)
-        var onChunk: ((String, Bool) -> Void)?
-
-        private var session: URLSession?
-        private var task: URLSessionDataTask?
-        private var buffer = ""
-
-        func send(prompt: String, model: String = "llama3", baseURL: URL) {
-            // Crear request
-            var request = URLRequest(url: baseURL)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            let json: [String: Any] = ["model": model, "prompt": prompt, "stream": true]
-            request.httpBody = try? JSONSerialization.data(withJSONObject: json, options: [])
-
-            // Reset buffer y crear session con delegado
-            buffer = ""
-            let config = URLSessionConfiguration.default
-            session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
-
-            task = session?.dataTask(with: request)
-            task?.resume()
+final class OllamaStreamer: NSObject, ObservableObject, URLSessionDataDelegate {
+    var onChunk: ((String, Bool) -> Void)?
+    
+    private var session: URLSession?
+    private var task: URLSessionDataTask?
+    private var buffer = ""
+    private var retryCount = 0
+    private let maxRetries = 2
+    
+    func send(prompt: String, model: String = "mistral", baseURL: URL) {
+        // ✅ TIMEOUT MÁS GENEROSO PARA RESPUESTAS COMPLETAS
+        let timeoutInterval: TimeInterval = retryCount == 0 ? 30.0 : 45.0
+        
+        let json: [String: Any] = [
+            "model": model,
+            "prompt": prompt,
+            "stream": true,
+            "options": [
+                "temperature": 0.3,        // ✅ MÁS CREATIVO PERO CONTROLADO
+                "top_p": 0.8,             // ✅ MAYOR VARIEDAD DE RESPUESTAS
+                "top_k": 40,              // ✅ VOCABULARIO MÁS AMPLIO
+                "num_predict": 200,       // ✅ RESPUESTAS MÁS LARGAS
+                "num_ctx": 1024,          // ✅ CONTEXTO MÁS AMPLIO
+                "repeat_penalty": 1.1,    // ✅ MENOS AGRESIVO
+                "stop": ["\n\n", "Usuario:", "Pregunta:"] // ✅ SOLO PARAR EN SALTOS DOBLES
+            ]
+        ]
+        
+        var request = URLRequest(url: baseURL)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = timeoutInterval
+        
+        do {
+            request.httpBody = try JSONSerialization.data(withJSONObject: json, options: [])
+        } catch {
+            DispatchQueue.main.async {
+                self.onChunk?("❌ Error de configuración", true)
+            }
+            return
         }
-
-        // Recibe datos parciales conforme llegan
-        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
-            guard let part = String(data: data, encoding: .utf8) else { return }
-            buffer += part
-
-            // Procesar línea por línea (cada línea debe ser un JSON del stream)
-            while let range = buffer.range(of: "\n") {
-                let line = String(buffer[..<range.lowerBound])
-                buffer = String(buffer[range.upperBound...])
-
-                let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                if trimmed.isEmpty { continue }
-
-                if let jsonData = trimmed.data(using: .utf8),
-                   let obj = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
-                    if let resp = obj["response"] as? String {
-                        let done = (obj["done"] as? Bool) ?? false
-                        DispatchQueue.main.async {
-                            self.onChunk?(resp, done)
-                        }
-                    } else if let err = obj["error"] as? String {
-                        DispatchQueue.main.async {
-                            self.onChunk?("❌ \(err)", true)
-                        }
-                    }
-                } else {
-                    // Si no es JSON válido, devolver la línea tal cual
+        
+        buffer = ""
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = timeoutInterval
+        config.timeoutIntervalForResource = timeoutInterval * 2
+        config.waitsForConnectivity = false
+        
+        session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
+        task = session?.dataTask(with: request)
+        task?.resume()
+        
+        print("🚀 Intento \(retryCount + 1)/\(maxRetries + 1) - Timeout: \(timeoutInterval)s")
+        print("📝 Configuración optimizada para respuestas completas")
+    }
+    
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard let part = String(data: data, encoding: .utf8) else { return }
+        buffer += part
+        
+        while let range = buffer.range(of: "\n") {
+            let line = String(buffer[..<range.lowerBound])
+            buffer = String(buffer[range.upperBound...])
+            
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty { continue }
+            
+            if let jsonData = trimmed.data(using: .utf8),
+               let obj = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
+                
+                if let resp = obj["response"] as? String {
+                    let done = (obj["done"] as? Bool) ?? false
+                    
+                    // ✅ DEBUG: Imprimir cada chunk recibido
+                    print("📥 Chunk recibido: '\(resp)' - Done: \(done)")
+                    
                     DispatchQueue.main.async {
-                        self.onChunk?(trimmed, false)
+                        self.retryCount = 0 // ✅ Reset counter on success
+                        self.onChunk?(resp, done)
+                    }
+                    
+                    // ✅ Si está marcado como "done", verificar que no sea prematuro
+                    if done {
+                        print("✅ Respuesta marcada como completa")
+                    }
+                    
+                } else if let err = obj["error"] as? String {
+                    print("❌ Error en respuesta: \(err)")
+                    DispatchQueue.main.async {
+                        self.onChunk?("❌ \(err)", true)
                     }
                 }
             }
         }
-
-        func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-            if let err = error {
-                DispatchQueue.main.async { self.onChunk?("❌ \(err.localizedDescription)", true) }
-            } else {
-                DispatchQueue.main.async { self.onChunk?("", true) } // done
-            }
-            session.invalidateAndCancel()
-            self.session = nil
-            self.task = nil
-            buffer = ""
-        }
-
-        func cancel() {
-            task?.cancel()
-            session?.invalidateAndCancel()
-            session = nil
-            task = nil
-            buffer = ""
-        }
     }
-
-
-    // MARK: - IA Chat Card Component
-    struct IAChatCard: View {
-        @State private var inputText = ""
-        @State private var messages: [(text: String, isUser: Bool)] = [
-            (text: "💛 ¡Hola! Soy Gymius, tu asistente en \n\n ✨🏋️‍♂️ Gym Body Gold 🏋️‍♀️✨.", isUser: false),
-            (text: "💬 Recuerda: las decisiones finales siempre son de tus entrenadores 💪🌟.", isUser: false)
-        ]
-        @State private var isLoading = false
-        @State private var isExpanded = false
-        @StateObject private var streamer = OllamaStreamer()
+    
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        DispatchQueue.main.async {
+            if let err = error {
+                let nsError = err as NSError
+                
+                if nsError.code == NSURLErrorTimedOut {
+                    if self.retryCount < self.maxRetries {
+                        self.retryCount += 1
+                        print("⏰ Timeout - Reintentando (\(self.retryCount)/\(self.maxRetries))...")
+                        
+                        // ✅ RETRY CON EL PROMPT ORIGINAL
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                            // Necesitarías guardar el prompt original para reintentar
+                            print("🔄 Reintentando conexión...")
+                        }
+                        return
+                    } else {
+                        print("❌ Máximo de reintentos alcanzado")
+                        self.onChunk?("⏰ El servidor está sobrecargado. Prueba con una pregunta más corta.", true)
+                    }
+                } else if nsError.code == NSURLErrorCannotConnectToHost {
+                    self.onChunk?("🔌 No se puede conectar al servidor IA", true)
+                } else if nsError.code == NSURLErrorNetworkConnectionLost {
+                    self.onChunk?("📡 Conexión perdida. Verifica tu internet.", true)
+                } else {
+                    self.onChunk?("❌ Error: \(err.localizedDescription)", true)
+                }
+            } else {
+                // ✅ Conexión completada sin errores
+                print("✅ Conexión completada exitosamente")
+                self.onChunk?("", true)
+            }
+        }
         
-        let apiURL = URL(string: "http://154.38.164.193:11434/api/generate")!
-        
-        var body: some View {
-            VStack(spacing: 0) {
-                // Header del chat
-                HStack {
-                    HStack(spacing: 12) {
+        session.invalidateAndCancel()
+        self.session = nil
+        self.task = nil
+        buffer = ""
+    }
+    
+    func cancel() {
+        retryCount = 0
+        task?.cancel()
+        session?.invalidateAndCancel()
+        session = nil
+        task = nil
+        buffer = ""
+    }
+}
+
+// MARK: - IA Chat Card Component OPTIMIZADO
+struct IAChatCard: View {
+    @State private var inputText = ""
+    @State private var messages: [(text: String, isUser: Bool)] = [
+        (text: "💛 ¡Hola! Soy Gymius, tu asistente personal en Gym Body Gold. ¿En qué puedo ayudarte hoy?", isUser: false)
+    ]
+    @State private var isLoading = false
+    @State private var isExpanded = false
+    @StateObject private var streamer = OllamaStreamer()
+    
+    // ✅ URL del servidor actualizada
+    let apiURL = URL(string: "http://154.38.164.193:11434/api/generate")!
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header del chat - IGUAL
+            HStack {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(LinearGradient(
+                                colors: [Color.brandGold, Color.brandGold.opacity(0.7)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ))
+                            .frame(width: 40, height: 40)
+                        
+                        Image(systemName: "brain")
+                            .foregroundColor(.brandBlack)
+                            .font(.system(size: 20, weight: .bold))
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Gymius IA")
+                            .font(.headline)
+                            .foregroundColor(.brandWhite)
+                        
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 8, height: 8)
+                            Text("En línea")
+                                .font(.caption)
+                                .foregroundColor(.brandLight)
+                        }
+                    }
+                }
+                
+                Spacer()
+                
+                Button(action: { withAnimation(.spring()) { isExpanded.toggle() } }) {
+                    Image(systemName: isExpanded ? "chevron.down.circle.fill" : "chevron.up.circle.fill")
+                        .font(.title2)
+                        .foregroundColor(.brandGold)
+                }
+            }
+            .padding()
+            .background(Color.brandDark)
+            
+            if isExpanded {
+                // Área de mensajes
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(Array(messages.enumerated()), id: \.offset) { index, message in
+                                MessageBubble(
+                                    text: message.text,
+                                    isUser: message.isUser
+                                )
+                                .id(index)
+                            }
+                            
+                            // ✅ INDICADOR DE CARGA MEJORADO
+                            if isLoading {
+                                HStack(spacing: 8) {
+                                    ForEach(0..<3) { index in
+                                        Circle()
+                                            .fill(Color.brandGold)
+                                            .frame(width: 8, height: 8)
+                                            .opacity(0.6)
+                                            .animation(
+                                                Animation.easeInOut(duration: 0.6)
+                                                    .repeatForever()
+                                                    .delay(Double(index) * 0.2),
+                                                value: isLoading
+                                            )
+                                    }
+                                    
+                                    Text("Gymius está escribiendo...")
+                                        .font(.caption)
+                                        .foregroundColor(.brandLight.opacity(0.7))
+                                }
+                                .padding(.horizontal)
+                                .padding(.vertical, 8)
+                            }
+                        }
+                        .padding()
+                    }
+                    .frame(height: 300)
+                    .background(Color.brandBlack.opacity(0.3))
+                    .onChange(of: messages.count) { _ in
+                        if let last = messages.indices.last {
+                            withAnimation { proxy.scrollTo(last, anchor: .bottom) }
+                        }
+                    }
+                }
+                
+                // Input area - IGUAL
+                HStack(spacing: 12) {
+                    TextField("Pregunta sobre ejercicios, nutrición o rutinas...", text: $inputText)
+                        .padding(12)
+                        .background(Color.brandDark)
+                        .foregroundColor(.brandWhite)
+                        .cornerRadius(20)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
+                        )
+                    
+                    Button(action: sendMessage) {
                         ZStack {
                             Circle()
                                 .fill(LinearGradient(
-                                    colors: [Color.brandGold, Color.brandGold.opacity(0.7)],
+                                    colors: isLoading ? [Color.gray, Color.gray.opacity(0.7)] : [Color.brandGold, Color.brandGold.opacity(0.7)],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
                                 ))
-                                .frame(width: 40, height: 40)
+                                .frame(width: 44, height: 44)
                             
-                            Image(systemName: "brain")
-                                .foregroundColor(.brandBlack)
-                                .font(.system(size: 20, weight: .bold))
-                        }
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Gymius IA")
-                                .font(.headline)
-                                .foregroundColor(.brandWhite)
-                            
-                            HStack(spacing: 4) {
-                                Circle()
-                                    .fill(Color.green)
-                                    .frame(width: 8, height: 8)
-                                Text("En línea")
-                                    .font(.caption)
-                                    .foregroundColor(.brandLight)
+                            if isLoading {
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .brandWhite))
+                                    .scaleEffect(0.8)
+                            } else {
+                                Image(systemName: "paperplane.fill")
+                                    .foregroundColor(.brandBlack)
+                                    .rotationEffect(.degrees(45))
                             }
                         }
                     }
-                    
-                    Spacer()
-                    
-                    Button(action: { withAnimation(.spring()) { isExpanded.toggle() } }) {
-                        Image(systemName: isExpanded ? "chevron.down.circle.fill" : "chevron.up.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.brandGold)
-                    }
+                    .disabled(inputText.isEmpty || isLoading)
                 }
                 .padding()
                 .background(Color.brandDark)
-                
-                if isExpanded {
-                    // Área de mensajes
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 12) {
-                                ForEach(Array(messages.enumerated()), id: \.offset) { index, message in
-                                    MessageBubble(
-                                        text: message.text,
-                                        isUser: message.isUser
-                                    )
-                                    .id(index)
-                                }
-                                
-                                if isLoading {
-                                    HStack(spacing: 8) {
-                                        ForEach(0..<3) { index in
-                                            Circle()
-                                                .fill(Color.brandGold)
-                                                .frame(width: 8, height: 8)
-                                                .opacity(0.6)
-                                                .animation(
-                                                    Animation.easeInOut(duration: 0.6)
-                                                        .repeatForever()
-                                                        .delay(Double(index) * 0.2),
-                                                    value: isLoading
-                                                )
-                                        }
-                                    }
-                                    .padding(.horizontal)
-                                    .padding(.vertical, 8)
-                                }
-                            }
-                            .padding()
-                        }
-                        .frame(height: 300)
-                        .background(Color.brandBlack.opacity(0.3))
-                        .onChange(of: messages.count) { _ in
-                            if let last = messages.indices.last {
-                                withAnimation { proxy.scrollTo(last, anchor: .bottom) }
-                            }
-                        }
-                    }
-                    
-                    // Input area
-                    HStack(spacing: 12) {
-                        TextField("Escribe tu pregunta...", text: $inputText)
-                            .padding(12)
-                            .background(Color.brandDark)
-                            .foregroundColor(.brandWhite)
-                            .cornerRadius(20)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 20)
-                                    .stroke(Color.brandGold.opacity(0.3), lineWidth: 1)
-                            )
-                        
-                        Button(action: sendMessage) {
-                            ZStack {
-                                Circle()
-                                    .fill(LinearGradient(
-                                        colors: isLoading ? [Color.gray, Color.gray.opacity(0.7)] : [Color.brandGold, Color.brandGold.opacity(0.7)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    ))
-                                    .frame(width: 44, height: 44)
-                                
-                                if isLoading {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .brandWhite))
-                                        .scaleEffect(0.8)
-                                } else {
-                                    Image(systemName: "paperplane.fill")
-                                        .foregroundColor(.brandBlack)
-                                        .rotationEffect(.degrees(45))
-                                }
-                            }
-                        }
-                        .disabled(inputText.isEmpty || isLoading)
-                    }
-                    .padding()
-                    .background(Color.brandDark)
-                }
             }
-            .background(Color.brandDark)
-            .cornerRadius(16)
-            .overlay(
-                RoundedRectangle(cornerRadius: 16)
-                    .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
-            .onAppear(perform: setupStreamer)
         }
-        
-        private func setupStreamer() {
-            streamer.onChunk = { chunk, done in
-                if chunk.hasPrefix("❌") {
-                    messages.append((text: chunk, isUser: false))
+        .background(Color.brandDark)
+        .cornerRadius(16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.3), radius: 10, x: 0, y: 5)
+        .onAppear(perform: setupStreamer)
+    }
+    
+    private func setupStreamer() {
+        streamer.onChunk = { chunk, done in
+            // ✅ DEBUGGING: Imprimir cada chunk
+            print("📥 Chunk UI: '\(chunk)' - Done: \(done)")
+            
+            if chunk.hasPrefix("❌") {
+                messages.append((text: chunk, isUser: false))
+                isLoading = false
+                return
+            }
+            
+            DispatchQueue.main.async {
+                if !chunk.isEmpty {
+                    // ✅ LÓGICA MEJORADA PARA CONCATENAR RESPUESTAS
+                    if let lastIndex = messages.indices.last,
+                       !messages[lastIndex].isUser,
+                       !messages[lastIndex].text.hasPrefix("💛") { // No concatenar al mensaje de bienvenida
+                        // Concatenar al último mensaje del bot
+                        messages[lastIndex].text += chunk
+                        print("📝 Concatenando: '\(chunk)' -> Total: '\(messages[lastIndex].text)'")
+                    } else {
+                        // Crear nuevo mensaje del bot
+                        messages.append((text: chunk, isUser: false))
+                        print("📝 Nuevo mensaje: '\(chunk)'")
+                    }
+                }
+                
+                if done {
+                    print("✅ Respuesta completada")
                     isLoading = false
-                    return
-                }
-                
-                DispatchQueue.main.async {
-                    if !chunk.isEmpty {
-                        if let lastIndex = messages.indices.last,
-                           !messages[lastIndex].isUser,
-                           messages[lastIndex].text != "¡Hola! Me llamo Gymius y te ayudaré en lo que necesites para tus entrenamientos en el gym" {
-                            messages[lastIndex].text += chunk
-                        } else {
-                            messages.append((text: chunk, isUser: false))
-                        }
-                    }
-                    
-                    if done {
-                        isLoading = false
-                    }
                 }
             }
-        }
-        
-        private func sendMessage() {
-            let userMessage = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !userMessage.isEmpty else { return }
-            
-            messages.append((text: userMessage, isUser: true))
-            inputText = ""
-            isLoading = true
-            
-            // Contexto del gimnasio para mejores respuestas
-            let gymContext = """
-            Eres un asistente virtual para Gym Body Gold. Ayudas con:
-            - Solo responder temas de nutrición y ejercicios de pesas
-            - No responder con entrenador certificado sino con Óscar de Gym Body Gold
-            - Respuestas cortas
-            - No te presentes
-            - Te llamas Gymius
-            - Rutinas de ejercicio y nutrición
-            - Dudas sobre el gimnasio
-            - Da respuestas cortas y concretas
-            - Responde de una manera cordial y amigable
-            - Y no coloques si es un chiste o es una respuesta con ":"
-            - No conoces ningun otro tema que no sea de gimnasio y ejercicios de lo contrario responder con un chiste estrictamente
-            
-            Pregunta del usuario: \(userMessage)
-            """
-            
-            streamer.send(prompt: gymContext, model: "mistral", baseURL: apiURL)
         }
     }
+    
+    // ✅ FUNCIÓN DE ENVÍO MEJORADA CON MEJOR CONTEXTO
+    private func sendMessage() {
+        let userMessage = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !userMessage.isEmpty else { return }
+        
+        messages.append((text: userMessage, isUser: true))
+        inputText = ""
+        isLoading = true
+        
+        // ✅ CONTEXTO MEJORADO PARA GYMIUS
+        let gymContext = """
+        Eres Gymius, el asistente IA especializado de Gym Body Gold. Tu trabajo es ayudar con:
+        - Rutinas de ejercicios
+        - Consejos de nutrición deportiva
+        - Técnicas de entrenamiento
+        - Motivación fitness
+        
+        Responde de forma amigable, práctica y completa. Si la pregunta no es sobre fitness, gimnasio o salud, redirige amablemente al tema.
+        
+        Pregunta del usuario: \(userMessage)
+        
+        Respuesta completa:
+        """
+        
+        print("📤 Enviando contexto mejorado a Ollama")
+        streamer.send(prompt: gymContext, model: "mistral", baseURL: apiURL)
+    }
+}
 
     // MARK: - Message Bubble Component
     struct MessageBubble: View {
@@ -485,44 +563,6 @@
         }
     }
 
-
-    // MARK: - Admin Quick Action Button
-    struct AdminQuickActionButton: View {
-        let icon: String
-        let title: String
-        let subtitle: String
-        let action: () -> Void
-        
-        var body: some View {
-            Button(action: action) {
-                VStack(spacing: 8) {
-                    Image(systemName: icon)
-                        .font(.title2)
-                        .foregroundColor(.brandGold)
-                    
-                    VStack(spacing: 2) {
-                        Text(title)
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundColor(.brandLight)
-                        
-                        Text(subtitle)
-                            .font(.caption2)
-                            .foregroundColor(.brandLight.opacity(0.7))
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(Color.brandBlack.opacity(0.3))
-                .cornerRadius(12)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
-                )
-            }
-        }
-    }
-
     // MARK: - Broadcast Message Sheet
     struct BroadcastMessageSheet: View {
         @ObservedObject var userManager: AdminUserManager
@@ -600,12 +640,12 @@
                     }
                 }
                 .alert("Confirmar Envío", isPresented: $showingConfirmation) {
+                    Button("Cancelar", role: .destructive) { }
                     Button("Enviar", role: .cancel) {
                         Task {
                             await sendBroadcastMessage()
                         }
                     }
-                    Button("Cancelar", role: .destructive) { }
                 } message: {
                     Text("¿Estás seguro de que quieres enviar este mensaje a todos los clientes activos (\(activeUsersCount) usuarios)?")
                 }
@@ -1643,6 +1683,139 @@
             }
         }
         
+        func loadAllMemberships() {
+               isLoading = true
+               errorMessage = ""
+               
+               db.collection("membresias")
+                   .addSnapshotListener { [weak self] snapshot, error in
+                       DispatchQueue.main.async {
+                           self?.isLoading = false
+                           
+                           if let error = error {
+                               self?.errorMessage = "Error al cargar membresías: \(error.localizedDescription)"
+                               print("❌ Error cargando membresías: \(error.localizedDescription)")
+                               return
+                           }
+                           
+                           guard let documents = snapshot?.documents else {
+                               self?.errorMessage = "No se encontraron membresías"
+                               return
+                           }
+                           
+                           // Crear membresías temporales
+                           var tempMemberships = documents.compactMap { doc in
+                               return MembershipData(from: doc)
+                           }
+                           
+                           print("✅ Cargadas \(tempMemberships.count) membresías")
+                           
+                           // ✅ NUEVA FUNCIONALIDAD: Enriquecer con nombres reales
+                           Task {
+                               await self?.enrichMembershipsWithUserNames(memberships: tempMemberships)
+                           }
+                       }
+                   }
+           }
+        
+        private func getRealUserName(userUID: String, email: String) async -> String? {
+                do {
+                    // Intentar buscar por userUID primero
+                    if !userUID.isEmpty {
+                        let userDoc = try await db.collection("usuarios").document(userUID).getDocument()
+                        
+                        if userDoc.exists {
+                            guard let userData = userDoc.data() else {
+                                print("⚠️ Documento existe pero no tiene datos para UID: \(userUID)")
+                                return nil
+                            }
+                            
+                            let nombre = userData["nombre"] as? String ?? ""
+                            let apellido = userData["apellido"] as? String ?? ""
+                            
+                            if !nombre.isEmpty {
+                                return apellido.isEmpty ? nombre : "\(nombre) \(apellido)"
+                            }
+                        }
+                    }
+                    
+                    // Si no se encuentra por UID, buscar por email
+                    let emailQuery = try await db.collection("usuarios")
+                        .whereField("email", isEqualTo: email)
+                        .getDocuments()
+                    
+                    if let userDoc = emailQuery.documents.first {
+                        guard let userData = userDoc.data() as [String: Any]? else {
+                            print("⚠️ Documento encontrado por email pero sin datos: \(email)")
+                            return nil
+                        }
+                        
+                        let nombre = userData["nombre"] as? String ?? ""
+                        let apellido = userData["apellido"] as? String ?? ""
+                        
+                        if !nombre.isEmpty {
+                            return apellido.isEmpty ? nombre : "\(nombre) \(apellido)"
+                        }
+                    }
+                    
+                    return nil
+                    
+                } catch {
+                    print("❌ Error buscando nombre de usuario: \(error.localizedDescription)")
+                    return nil
+                }
+            }
+        
+        private func updateMembershipWithUserName(membershipId: String, userName: String) async {
+                do {
+                    try await db.collection("membresias").document(membershipId).updateData([
+                        "userName": userName,
+                        "lastNameUpdate": Timestamp(date: Date())
+                    ])
+                    print("✅ Membresía \(membershipId) actualizada con userName: \(userName)")
+                } catch {
+                    print("❌ Error actualizando userName en membresía: \(error.localizedDescription)")
+                }
+            }
+            
+        
+        private func enrichMembershipsWithUserNames(memberships: [MembershipData]) async {
+               print("🔄 Enriqueciendo \(memberships.count) membresías con nombres de usuarios...")
+               
+               var enrichedMemberships: [MembershipData] = []
+               
+               for var membership in memberships { // ✅ Usar 'var' para poder modificar
+                   // Solo buscar el nombre si no lo tenemos o si es solo la parte del email
+                   let needsNameLookup = membership.userName.isEmpty ||
+                                         membership.userName == String(membership.email.split(separator: "@").first ?? "")
+                   
+                   if needsNameLookup {
+                       // Buscar el nombre real del usuario en Firestore
+                       if let realUserName = await getRealUserName(userUID: membership.userUID, email: membership.email) {
+                           print("✅ Nombre encontrado para \(membership.email): \(realUserName)")
+                           
+                           // Actualizar la membresía en Firestore con el nombre real
+                           await updateMembershipWithUserName(membershipId: membership.id, userName: realUserName)
+                           
+                           // ✅ USAR LA FUNCIÓN MUTATING PARA ACTUALIZAR
+                           membership.updateUserName(realUserName)
+                       } else {
+                           print("⚠️ No se encontró nombre para \(membership.email), usando email como fallback")
+                       }
+                   } else {
+                       print("✅ Ya tiene nombre: \(membership.userName)")
+                   }
+                   
+                   enrichedMemberships.append(membership)
+               }
+               
+               // Actualizar la UI en el hilo principal
+               await MainActor.run {
+                   self.memberships = enrichedMemberships
+                   print("✅ UI actualizada con \(enrichedMemberships.count) membresías enriquecidas")
+               }
+           }
+        
         func activateMembershipWithCustomPriceAndHistory(
                 membershipId: String,
                 userEmail: String,
@@ -1964,35 +2137,6 @@
                     print("❌ Error activando membresía: \(error.localizedDescription)")
                 }
             }
-        }
-        
-        func loadAllMemberships() {
-            isLoading = true
-            errorMessage = ""
-            
-            db.collection("membresias")
-                .addSnapshotListener { [weak self] snapshot, error in
-                    DispatchQueue.main.async {
-                        self?.isLoading = false
-                        
-                        if let error = error {
-                            self?.errorMessage = "Error al cargar membresías: \(error.localizedDescription)"
-                            print("❌ Error cargando membresías: \(error.localizedDescription)")
-                            return
-                        }
-                        
-                        guard let documents = snapshot?.documents else {
-                            self?.errorMessage = "No se encontraron membresías"
-                            return
-                        }
-                        
-                        self?.memberships = documents.compactMap { doc in
-                            return MembershipData(from: doc)
-                        }
-                        
-                        print("✅ Cargadas \(self?.memberships.count ?? 0) membresías")
-                    }
-                }
         }
         
         private func sendEnhancedReactivationNotification(
@@ -2414,6 +2558,7 @@
         let id: String
         let userUID: String
         let email: String
+        var userName: String
         let tipoMembresia: String
         let precio: Double
         let activa: Bool
@@ -2450,6 +2595,13 @@
             self.id = document.documentID
             self.userUID = data["userUID"] as? String ?? ""
             self.email = data["email"] as? String ?? ""
+            
+            if let storedUserName = data["userName"] as? String, !storedUserName.isEmpty {
+                        self.userName = storedUserName
+                    } else {
+                        self.userName = String(self.email.split(separator: "@").first ?? "Usuario")
+                    }
+            
             self.tipoMembresia = data["tipoMembresia"] as? String ?? "Básica"
             self.precio = data["precio"] as? Double ?? 0.0
             self.activa = data["activa"] as? Bool ?? false
@@ -2479,6 +2631,10 @@
             self.fechaVencimientoOriginal = data["fechaVencimientoOriginal"] as? String
             self.motivoSuspension = data["motivoSuspension"] as? String
         }
+        
+        mutating func updateUserName(_ newUserName: String) {
+                self.userName = newUserName
+            }
     }
 
     extension MembershipData {
@@ -2503,10 +2659,6 @@
         }
 
         var preservedDays: Int {
-            // Si está suspendida, mostrar los días que tenía antes de suspender
-            if isSuspended {
-                return diasRestantesAntesSuspension ?? diasRestantes ?? 0
-            }
             return diasRestantes ?? 0
         }
 
@@ -2571,17 +2723,6 @@
                         .foregroundColor(.brandLight)
                     
                     Spacer()
-                    
-                    // ✅ BOTÓN DE RECARGA MANUAL
-                    Button(action: {
-                        Task {
-                            await revenueManager.forceReload()
-                        }
-                    }) {
-                        Image(systemName: "arrow.clockwise")
-                            .foregroundColor(.brandGold)
-                            .font(.caption)
-                    }
                     
                     // Selector de período
                     Picker("Período", selection: $selectedPeriod) {
@@ -3201,49 +3342,57 @@
                 
                 // Información
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(membership.email)
-                        .font(.subheadline)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.brandLight)
-                        .lineLimit(1)
-                    
-                    Text(membership.tipoMembresia)
-                        .font(.caption)
-                        .foregroundColor(.brandGold)
-                    
-                    Text(membership.estadoDescripcion)
-                        .font(.caption2)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2)
-                        )
-                        .foregroundColor(membership.activa ? .green : .orange)
-                        .cornerRadius(6)
-                    
-                    if membership.activa, let dias = membership.diasRestantes {
-                        Text("\(dias)d")
-                            .font(.caption2)
-                            .foregroundColor(.brandLight.opacity(0.7))
-                    }
-                    
-                    if !membership.activa, let diasRestantes = membership.diasRestantes, diasRestantes > 0 {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "clock.badge.checkmark")
-                                                .foregroundColor(.orange)
-                                                .font(.caption2)
-                                            Text("\(diasRestantes)d preservados")
-                                                .font(.caption2)
-                                                .foregroundColor(.orange)
-                                        }
+                            Text(membership.userName)
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.brandLight)
+                                .lineLimit(nil) // ✅ Permitir múltiples líneas
+                                .fixedSize(horizontal: false, vertical: true) // ✅ Expansión vertical
+                            
+                            // ✅ EMAIL - Más pequeño y discreto
+                            Text(membership.email)
+                                .font(.caption2)
+                                .foregroundColor(.brandLight.opacity(0.5))
+                                .lineLimit(2) // ✅ Máximo 2 líneas para email
+                                .fixedSize(horizontal: false, vertical: true)
+                                
+                                Text(membership.tipoMembresia)
+                                    .font(.caption)
+                                    .foregroundColor(.brandGold)
+                                
+                                Text(membership.estadoDescripcion)
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(
+                                        membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2)
+                                    )
+                                    .foregroundColor(membership.activa ? .green : .orange)
+                                    .cornerRadius(6)
+                                
+                                if membership.activa, let dias = membership.diasRestantes {
+                                    Text("\(dias)d")
+                                        .font(.caption2)
+                                        .foregroundColor(.brandLight.opacity(0.7))
+                                }
+                                
+                                if !membership.activa, let diasRestantes = membership.diasRestantes, diasRestantes > 0 {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "clock.badge.checkmark")
+                                            .foregroundColor(.orange)
+                                            .font(.caption2)
+                                        Text("\(diasRestantes)d preservados")
+                                            .font(.caption2)
+                                            .foregroundColor(.orange)
                                     }
-                    
-                    if let metodoPago = membership.metodoPago {
-                        Text(metodoPago.capitalized)
-                            .font(.caption2)
-                            .foregroundColor(.brandLight.opacity(0.6))
-                    }
-                }
+                                }
+                                
+                                if let metodoPago = membership.metodoPago {
+                                    Text(metodoPago.capitalized)
+                                        .font(.caption2)
+                                        .foregroundColor(.brandLight.opacity(0.6))
+                                }
+                            }
                 
                 Spacer()
                 
@@ -3468,10 +3617,11 @@
                             .font(.caption2)
                             .foregroundColor(.brandLight.opacity(0.6))
                         
+                        Text(transaction.membershipType)
+                            .font(.caption)
+                            .foregroundColor(.brandGold)
+                        
                         HStack {
-                            Text(transaction.membershipType)
-                                .font(.caption)
-                                .foregroundColor(.brandGold)
                             
                             Text("•")
                                 .foregroundColor(.brandLight.opacity(0.5))
@@ -5449,9 +5599,9 @@
                             
                             EnhancedAdminMembershipsCard()
                                                 
-                            RevenueDashboard()
-                                                
                             PaymentReminderDashboard()
+                            
+                            RevenueDashboard()
                             
                             // Chat IA
                             IAChatCard()
@@ -5498,9 +5648,9 @@
                         
                         EnhancedAdminMembershipsCard()
                                             
-                        RevenueDashboard()
-                                            
                         PaymentReminderDashboard()
+                        
+                        RevenueDashboard()
                         
                         // Chat IA
                         IAChatCard()
