@@ -24,23 +24,34 @@ final class OllamaStreamer: NSObject, ObservableObject, URLSessionDataDelegate {
     private var buffer = ""
     private var retryCount = 0
     private let maxRetries = 2
+    private var originalPrompt = "" // Para reintentos
     
     func send(prompt: String, model: String = "mistral", baseURL: URL) {
-        // ✅ TIMEOUT MÁS GENEROSO PARA RESPUESTAS COMPLETAS
-        let timeoutInterval: TimeInterval = retryCount == 0 ? 30.0 : 45.0
+        // Guardar prompt para posibles reintentos
+        originalPrompt = prompt
+        
+        // Timeout más generoso
+        let timeoutInterval: TimeInterval = 60.0 // Aumentar a 60 segundos
+        
+        // Prompt más conciso y directo
+        let optimizedPrompt = """
+        Eres Gymius, asistente de Gym Body Gold. Responde sobre fitness, ejercicios y nutrición.
+        
+        \(prompt)
+        """
         
         let json: [String: Any] = [
             "model": model,
-            "prompt": prompt,
+            "prompt": optimizedPrompt,
             "stream": true,
             "options": [
-                "temperature": 0.3,        // ✅ MÁS CREATIVO PERO CONTROLADO
-                "top_p": 0.8,             // ✅ MAYOR VARIEDAD DE RESPUESTAS
-                "top_k": 40,              // ✅ VOCABULARIO MÁS AMPLIO
-                "num_predict": 200,       // ✅ RESPUESTAS MÁS LARGAS
-                "num_ctx": 1024,          // ✅ CONTEXTO MÁS AMPLIO
-                "repeat_penalty": 1.1,    // ✅ MENOS AGRESIVO
-                "stop": ["\n\n", "Usuario:", "Pregunta:"] // ✅ SOLO PARAR EN SALTOS DOBLES
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "top_k": 40,
+                "num_predict": 150, // Respuestas más cortas para evitar timeouts
+                "num_ctx": 512, // Contexto reducido
+                "repeat_penalty": 1.05,
+                "stop": ["\n\n", "Usuario:", "Pregunta:", "Human:", "Assistant:"]
             ]
         ]
         
@@ -53,7 +64,7 @@ final class OllamaStreamer: NSObject, ObservableObject, URLSessionDataDelegate {
             request.httpBody = try JSONSerialization.data(withJSONObject: json, options: [])
         } catch {
             DispatchQueue.main.async {
-                self.onChunk?("❌ Error de configuración", true)
+                self.onChunk?("❌ Error de configuración: \(error.localizedDescription)", true)
             }
             return
         }
@@ -62,19 +73,22 @@ final class OllamaStreamer: NSObject, ObservableObject, URLSessionDataDelegate {
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = timeoutInterval
         config.timeoutIntervalForResource = timeoutInterval * 2
-        config.waitsForConnectivity = false
+        config.waitsForConnectivity = true // Permitir espera por conectividad
         
         session = URLSession(configuration: config, delegate: self, delegateQueue: nil)
         task = session?.dataTask(with: request)
         task?.resume()
         
-        print("🚀 Intento \(retryCount + 1)/\(maxRetries + 1) - Timeout: \(timeoutInterval)s")
-        print("📝 Configuración optimizada para respuestas completas")
+        print("🚀 Gymius - Intento \(retryCount + 1)/\(maxRetries + 1)")
+        print("📝 Prompt optimizado enviado")
+        print("⏰ Timeout: \(timeoutInterval)s")
     }
     
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         guard let part = String(data: data, encoding: .utf8) else { return }
         buffer += part
+        
+        var hasValidResponse = false
         
         while let range = buffer.range(of: "\n") {
             let line = String(buffer[..<range.lowerBound])
@@ -83,31 +97,38 @@ final class OllamaStreamer: NSObject, ObservableObject, URLSessionDataDelegate {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty { continue }
             
+            // Log cada línea para debugging
+            print("📥 Línea recibida: '\(trimmed)'")
+            
             if let jsonData = trimmed.data(using: .utf8),
                let obj = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] {
                 
                 if let resp = obj["response"] as? String {
                     let done = (obj["done"] as? Bool) ?? false
+                    hasValidResponse = true
                     
-                    // ✅ DEBUG: Imprimir cada chunk recibido
-                    print("📥 Chunk recibido: '\(resp)' - Done: \(done)")
+                    print("📝 Chunk: '\(resp)' - Done: \(done)")
                     
                     DispatchQueue.main.async {
-                        self.retryCount = 0 // ✅ Reset counter on success
+                        self.retryCount = 0 // Reset en éxito
                         self.onChunk?(resp, done)
                     }
                     
-                    // ✅ Si está marcado como "done", verificar que no sea prematuro
                     if done {
-                        print("✅ Respuesta marcada como completa")
+                        print("✅ Respuesta completa recibida")
+                        return
                     }
                     
                 } else if let err = obj["error"] as? String {
                     print("❌ Error en respuesta: \(err)")
                     DispatchQueue.main.async {
-                        self.onChunk?("❌ \(err)", true)
+                        self.onChunk?("❌ Error del servidor: \(err)", true)
                     }
+                    return
                 }
+            } else {
+                // Si no es JSON válido, logearlo
+                print("⚠️ Línea no es JSON válido: '\(trimmed)'")
             }
         }
     }
@@ -116,45 +137,47 @@ final class OllamaStreamer: NSObject, ObservableObject, URLSessionDataDelegate {
         DispatchQueue.main.async {
             if let err = error {
                 let nsError = err as NSError
+                print("❌ Error de conexión: \(err.localizedDescription)")
+                print("❌ Código de error: \(nsError.code)")
                 
                 if nsError.code == NSURLErrorTimedOut {
                     if self.retryCount < self.maxRetries {
                         self.retryCount += 1
                         print("⏰ Timeout - Reintentando (\(self.retryCount)/\(self.maxRetries))...")
                         
-                        // ✅ RETRY CON EL PROMPT ORIGINAL
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                            // Necesitarías guardar el prompt original para reintentar
-                            print("🔄 Reintentando conexión...")
+                        // Reintentar con el prompt original
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                            guard let baseURL = URL(string: "http://154.38.164.193:11434/api/generate") else { return }
+                            self.send(prompt: self.originalPrompt, baseURL: baseURL)
                         }
                         return
                     } else {
                         print("❌ Máximo de reintentos alcanzado")
-                        self.onChunk?("⏰ El servidor está sobrecargado. Prueba con una pregunta más corta.", true)
+                        self.onChunk?("⏰ El servidor tardó demasiado en responder. Intenta con una pregunta más simple.", true)
                     }
                 } else if nsError.code == NSURLErrorCannotConnectToHost {
-                    self.onChunk?("🔌 No se puede conectar al servidor IA", true)
+                    self.onChunk?("🔌 No se puede conectar al servidor. Verifica tu conexión.", true)
                 } else if nsError.code == NSURLErrorNetworkConnectionLost {
-                    self.onChunk?("📡 Conexión perdida. Verifica tu internet.", true)
+                    self.onChunk?("📡 Conexión perdida. Intenta nuevamente.", true)
                 } else {
-                    self.onChunk?("❌ Error: \(err.localizedDescription)", true)
+                    self.onChunk?("❌ Error de conexión: \(err.localizedDescription)", true)
                 }
             } else {
-                // ✅ Conexión completada sin errores
-                print("✅ Conexión completada exitosamente")
-                self.onChunk?("", true)
+                print("✅ Conexión completada sin errores")
             }
         }
         
-        session.invalidateAndCancel()
-        self.session = nil
-        self.task = nil
-        buffer = ""
+        cleanup()
     }
     
     func cancel() {
+        print("🛑 Cancelando solicitud...")
         retryCount = 0
         task?.cancel()
+        cleanup()
+    }
+    
+    private func cleanup() {
         session?.invalidateAndCancel()
         session = nil
         task = nil
