@@ -1247,6 +1247,7 @@ struct IAChatCard: View {
                             direccion: data["direccion"] as? String ?? "",
                             activo: data["activo"] as? Bool ?? true,
                             idGenero: data["idGenero"] as? Int ?? 1,
+                            ocupacion: data["ocupacion"] as? String ?? "",
                             edad: data["edad"] as? String,
                             peso: data["peso"] as? String,
                             estatura: data["estatura"] as? String,
@@ -1304,6 +1305,7 @@ struct IAChatCard: View {
                                 direccion: data["direccion"] as? String ?? "",
                                 activo: data["activo"] as? Bool ?? true,
                                 idGenero: data["idGenero"] as? Int ?? 1,
+                                ocupacion: data["ocupacion"] as? String ?? "",
                                 edad: data["edad"] as? String,
                                 peso: data["peso"] as? String,
                                 estatura: data["estatura"] as? String,
@@ -5185,6 +5187,7 @@ struct IAChatCard: View {
                                     direccion: data["direccion"] as? String ?? "",
                                     activo: data["activo"] as? Bool ?? true,
                                     idGenero: data["idGenero"] as? Int ?? 1,
+                                    ocupacion: data["ocupacion"] as? String ?? "",
                                     edad: data["edad"] as? String,
                                     peso: data["peso"] as? String,
                                     estatura: data["estatura"] as? String,
@@ -5846,6 +5849,25 @@ struct IAChatCard: View {
         @State private var idTipoDocumento = 1
         @State private var idGenero = 1
         @State private var fechaNacimiento = Date()
+        @State private var ocupacion = ""
+        
+        let ocupaciones = [
+            "Estudiante",
+            "Empleado",
+            "Independiente",
+            "Desempleado",
+            "Jubilado",
+            "Hogar",
+            "Médico",
+            "Ingeniero",
+            "Abogado",
+            "Profesor",
+            "Enfermero",
+            "Arquitecto",
+            "Contador",
+            "Diseñador",
+            "Técnico"
+        ];
         
         let tiposDocumento = [
                 (1, "CC"),
@@ -6037,6 +6059,30 @@ struct IAChatCard: View {
                                         )
                                         .disabled(true)
                                     }
+                                    
+                                    
+                                    if isEditing {
+                                        CustomSearchablePicker(
+                                            placeholder: "Ocupación",
+                                            icon: "briefcase.fill",
+                                            selection: Binding(
+                                                get: { ocupacion },
+                                                set: { newValue in
+                                                    ocupacion = newValue
+                                                    editableUser?.ocupacion = newValue
+                                                    print("🔄 Ocupación actualizada a: \(newValue)") // Debug
+                                                }
+                                            ),
+                                            options: ocupaciones.map { ($0, $0) }
+                                        )
+                                    } else {
+                                        CustomTextField(
+                                            placeholder: "Ocupación",
+                                            text: .constant(userData.ocupacion),
+                                            icon: "briefcase.fill"
+                                        )
+                                        .disabled(true)
+                                    }
 
                                     // ✅ NUEVO: Picker para género
                                     if isEditing {
@@ -6179,11 +6225,11 @@ struct IAChatCard: View {
                                 
                                 Task {
                                     if var updated = editableUser {
-                                        // ✅ Actualizar con los valores de los pickers
                                         updated.idTipoDocumento = idTipoDocumento
                                         updated.idGenero = idGenero
                                         updated.fechaNacimiento = fechaNacimiento
                                         updated.edad = fechaNacimiento.calculateAgeString()
+                                        updated.ocupacion = ocupacion
                                         
                                         print("🚀 ENVIANDO DATOS ACTUALIZADOS:")
                                         print("- Nombre: '\(updated.nombre)'")
@@ -6228,6 +6274,7 @@ struct IAChatCard: View {
                         idTipoDocumento = current.idTipoDocumento
                         idGenero = current.idGenero
                         fechaNacimiento = current.fechaNacimiento
+                        ocupacion = current.ocupacion
                     }
                 }
                 .preferredColorScheme(.dark)

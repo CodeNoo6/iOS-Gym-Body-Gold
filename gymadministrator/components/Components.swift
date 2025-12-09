@@ -30,6 +30,35 @@ struct HeaderCard: View {
                     Text(authManager.user?.displayName ?? authManager.user?.email ?? "Administrador")
                         .font(.subheadline)
                         .foregroundColor(.brandDark)
+                    
+                    if let ocupacion = authManager.currentUserData?.ocupacion, !ocupacion.isEmpty {
+
+                        HStack(spacing: 12) {
+
+                            // Ícono grande y visible
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color.brandDark.opacity(0.15))
+                                    .frame(width: 38, height: 38)
+
+                                Image(systemName: "briefcase.fill")
+                                    .font(.system(size: 18, weight: .bold))
+                                    .foregroundColor(.brandDark)
+                            }
+
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Ocupación")
+                                    .font(.caption)
+                                    .foregroundColor(.brandDark.opacity(0.7))
+
+                                Text(ocupacion)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.brandDark)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
                 }
                 
                 Spacer()

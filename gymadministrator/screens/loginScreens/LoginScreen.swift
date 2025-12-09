@@ -29,13 +29,14 @@ struct UserData {
     var direccion: String
     var activo: Bool
     var idGenero: Int
+    var ocupacion: String                 // ✅ NUEVO: Ocupación obligatoria
     var edad: String?
     var peso: String?
     var estatura: String?
     var fechaCreacion: Date
     var rol: String
-    var fcmToken: String? // Nuevo campo para FCM token
-    var lastTokenUpdate: Date? // Última actualización del token
+    var fcmToken: String?                 // Nuevo campo para FCM token
+    var lastTokenUpdate: Date?            // Última actualización del token
 
     var dictionary: [String: Any] {
         var dict: [String: Any] = [
@@ -51,6 +52,7 @@ struct UserData {
             "direccion": direccion,
             "activo": activo,
             "idGenero": idGenero,
+            "ocupacion": ocupacion, // ✅ Persistir ocupación
             "fechaCreacion": Timestamp(date: fechaCreacion),
             "rol": rol
         ]
@@ -78,6 +80,7 @@ struct UserData {
         self.direccion = firestoreData["direccion"] as? String ?? ""
         self.activo = firestoreData["activo"] as? Bool ?? true
         self.idGenero = firestoreData["idGenero"] as? Int ?? 1
+        self.ocupacion = firestoreData["ocupacion"] as? String ?? "" // ✅ Leer ocupación
         self.edad = firestoreData["edad"] as? String
         self.peso = firestoreData["peso"] as? String
         self.estatura = firestoreData["estatura"] as? String
@@ -101,6 +104,7 @@ struct UserData {
         direccion: String,
         activo: Bool,
         idGenero: Int,
+        ocupacion: String,                 // ✅ Requerida en el init manual
         edad: String? = nil,
         peso: String? = nil,
         estatura: String? = nil,
@@ -120,6 +124,7 @@ struct UserData {
         self.direccion = direccion
         self.activo = activo
         self.idGenero = idGenero
+        self.ocupacion = ocupacion
         self.edad = edad
         self.peso = peso
         self.estatura = estatura
@@ -187,37 +192,64 @@ struct CustomDatePicker: View {
         )
     }
 }
-
 struct CustomPicker<T: Hashable>: View {
     let placeholder: String
     let icon: String
     @Binding var selection: T
     let options: [(T, String)]
     
+    // ✅ Obtener el texto de la opción seleccionada
+    private var selectedText: String {
+        options.first(where: { $0.0 == selection })?.1 ?? "Selecciona..."
+    }
+    
     var body: some View {
-        HStack(spacing: 15) {
-            Image(systemName: icon)
-                .foregroundColor(.brandGold)
-                .frame(width: 20, height: 20)
-            
-            Text(placeholder)
-                .foregroundColor(.brandGold)
-                .font(.system(size: 16))
-            
-            Spacer()
-            
-            Picker(placeholder, selection: $selection) {
-                ForEach(options, id: \.0) { option in
-                    Text(option.1)
-                        .foregroundColor(.brandGold)
-                        .tag(option.0)
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            // Header con icono y placeholder
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .foregroundColor(.brandGold)
+                    .frame(width: 20, height: 20)
+                
+                Text(placeholder)
+                    .foregroundColor(.brandGold)
+                    .font(.system(size: 16))
             }
-            .pickerStyle(MenuPickerStyle())
-            .accentColor(.brandGold)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            
+            // ✅ Menu en lugar de Picker para que toda el área sea clickeable
+            Menu {
+                ForEach(options, id: \.0) { option in
+                    Button(action: {
+                        selection = option.0
+                    }) {
+                        HStack {
+                            Text(option.1)
+                            if selection == option.0 {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack {
+                    Text(selectedText)
+                        .foregroundColor(selectedText == "Selecciona..." ? .brandGold.opacity(0.5) : .brandLight)
+                        .font(.system(size: 15))
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.down")
+                        .foregroundColor(.brandGold)
+                        .font(.system(size: 12))
+                }
+                .contentShape(Rectangle()) // ✅ Hace que toda el área sea clickeable
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 12)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
         .background(
             RoundedRectangle(cornerRadius: 15)
                 .fill(Color.brandDark.opacity(0.3))
@@ -226,6 +258,177 @@ struct CustomPicker<T: Hashable>: View {
         .overlay(
             RoundedRectangle(cornerRadius: 15)
                 .stroke(Color.brandGold.opacity(0.2), lineWidth: 1)
+        )
+    }
+}
+
+struct CustomSearchablePicker<T: Hashable>: View {
+    let placeholder: String
+    let icon: String
+    @Binding var selection: T
+    let options: [(T, String)]
+    
+    @State private var searchText = ""
+    @State private var isExpanded = false
+    
+    // ✅ Obtener el texto de la opción seleccionada
+    private var selectedText: String {
+        options.first(where: { $0.0 == selection })?.1 ?? "Selecciona..."
+    }
+    
+    // ✅ Filtrar opciones según búsqueda
+    private var filteredOptions: [(T, String)] {
+        if searchText.isEmpty {
+            return options
+        }
+        return options.filter { $0.1.localizedCaseInsensitiveContains(searchText) }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // Header con icono y placeholder
+            HStack(spacing: 10) {
+                Image(systemName: icon)
+                    .foregroundColor(.brandGold)
+                    .frame(width: 20, height: 20)
+                
+                Text(placeholder)
+                    .foregroundColor(.brandGold)
+                    .font(.system(size: 16))
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            
+            // Botón principal que abre el selector
+            Button(action: {
+                withAnimation(.spring(response: 0.3)) {
+                    isExpanded.toggle()
+                    if isExpanded {
+                        searchText = ""
+                    }
+                }
+            }) {
+                HStack {
+                    Text(selectedText)
+                        .foregroundColor(selectedText == "Selecciona..." ? .brandGold.opacity(0.5) : .brandLight)
+                        .font(.system(size: 15))
+                    
+                    Spacer()
+                    
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .foregroundColor(.brandGold)
+                        .font(.system(size: 12))
+                }
+                .contentShape(Rectangle())
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, isExpanded ? 8 : 12)
+            
+            // ✅ Panel expandible con búsqueda
+            if isExpanded {
+                VStack(spacing: 8) {
+                    // Campo de búsqueda
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                            .foregroundColor(.brandGold.opacity(0.6))
+                            .font(.system(size: 14))
+                        
+                        TextField("Buscar...", text: $searchText)
+                            .foregroundColor(.brandLight)
+                            .font(.system(size: 14))
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                        
+                        if !searchText.isEmpty {
+                            Button(action: {
+                                searchText = ""
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.brandGold.opacity(0.6))
+                                    .font(.system(size: 14))
+                            }
+                        }
+                    }
+                    .padding(.horizontal, 15)
+                    .padding(.vertical, 10)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.brandDark.opacity(0.5))
+                    )
+                    .padding(.horizontal, 20)
+                    
+                    // Divider
+                    Rectangle()
+                        .fill(Color.brandGold.opacity(0.2))
+                        .frame(height: 1)
+                        .padding(.horizontal, 20)
+                    
+                    // Lista de opciones filtradas
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            if filteredOptions.isEmpty {
+                                Text("No se encontraron resultados")
+                                    .foregroundColor(.brandGold.opacity(0.5))
+                                    .font(.system(size: 14))
+                                    .italic()
+                                    .padding(.vertical, 20)
+                            } else {
+                                ForEach(filteredOptions, id: \.0) { option in
+                                    Button(action: {
+                                        selection = option.0
+                                        withAnimation(.spring(response: 0.3)) {
+                                            isExpanded = false
+                                        }
+                                        searchText = ""
+                                    }) {
+                                        HStack {
+                                            Text(option.1)
+                                                .foregroundColor(selection == option.0 ? .brandGold : .brandLight)
+                                                .font(.system(size: 14))
+                                            
+                                            Spacer()
+                                            
+                                            if selection == option.0 {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .foregroundColor(.brandGold)
+                                                    .font(.system(size: 16))
+                                            }
+                                        }
+                                        .padding(.horizontal, 20)
+                                        .padding(.vertical, 12)
+                                        .background(
+                                            selection == option.0
+                                                ? Color.brandGold.opacity(0.1)
+                                                : Color.clear
+                                        )
+                                    }
+                                    
+                                    if option.0 != filteredOptions.last?.0 {
+                                        Divider()
+                                            .background(Color.brandGold.opacity(0.1))
+                                            .padding(.horizontal, 20)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .frame(maxHeight: 200) // ✅ Altura máxima del scroll
+                    .padding(.bottom, 8)
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: 15)
+                .fill(Color.brandDark.opacity(0.3))
+                .backdrop(blur: 10)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 15)
+                .stroke(
+                    isExpanded ? Color.brandGold.opacity(0.5) : Color.brandGold.opacity(0.2),
+                    lineWidth: isExpanded ? 2 : 1
+                )
         )
     }
 }
@@ -389,182 +592,178 @@ class AuthManager: ObservableObject {
     }
     
     func loadUserData(uid: String) async {
-            print("🔄 Recargando datos del usuario con UID: \(uid)")
+        print("🔄 Recargando datos del usuario con UID: \(uid)")
+        
+        do {
+            let document = try await Firestore.firestore().collection("usuarios").document(uid).getDocument()
             
-            do {
-                let document = try await Firestore.firestore().collection("usuarios").document(uid).getDocument()
+            if document.exists, let data = document.data() {
+                print("✅ Documento de usuario encontrado en Firestore")
                 
-                if document.exists, let data = document.data() {
-                    print("✅ Documento de usuario encontrado en Firestore")
-                    
-                    let userData = UserData(
-                        uid: uid,
-                        email: data["email"] as? String ?? "",
-                        displayName: data["displayName"] as? String ?? "",
-                        idTipoDocumento: data["idTipoDocumento"] as? Int ?? 1,
-                        numeroDocumento: data["numeroDocumento"] as? String ?? "",
-                        nombre: data["nombre"] as? String ?? "",
-                        apellido: data["apellido"] as? String ?? "",
-                        telefono: data["telefono"] as? String ?? "",
-                        fechaNacimiento: (data["fechaNacimiento"] as? Timestamp)?.dateValue() ?? Date(),
-                        direccion: data["direccion"] as? String ?? "",
-                        activo: data["activo"] as? Bool ?? true,
-                        idGenero: data["idGenero"] as? Int ?? 1,
-                        edad: data["edad"] as? String,
-                        peso: data["peso"] as? String,
-                        estatura: data["estatura"] as? String,
-                        fechaCreacion: (data["fechaCreacion"] as? Timestamp)?.dateValue() ?? Date(),
-                        rol: data["rol"] as? String ?? "usuario"
-                    )
-                    
-                    await MainActor.run {
-                        self.currentUserData = userData
-                        print("✅ Datos de usuario asignados al AuthManager")
-                        print("- Nombre: \(userData.nombre)")
-                        print("- Email: \(userData.email)")
-                        print("- Rol: \(userData.rol)")
-                    }
-                    
-                } else {
-                    print("❌ No se encontró documento del usuario en Firestore")
-                    print("- UID buscado: \(uid)")
-                    print("- Document exists: \(document.exists)")
+                let userData = UserData(
+                    uid: uid,
+                    email: data["email"] as? String ?? "",
+                    displayName: data["displayName"] as? String ?? "",
+                    idTipoDocumento: data["idTipoDocumento"] as? Int ?? 1,
+                    numeroDocumento: data["numeroDocumento"] as? String ?? "",
+                    nombre: data["nombre"] as? String ?? "",
+                    apellido: data["apellido"] as? String ?? "",
+                    telefono: data["telefono"] as? String ?? "",
+                    fechaNacimiento: (data["fechaNacimiento"] as? Timestamp)?.dateValue() ?? Date(),
+                    direccion: data["direccion"] as? String ?? "",
+                    activo: data["activo"] as? Bool ?? true,
+                    idGenero: data["idGenero"] as? Int ?? 1,
+                    ocupacion: data["ocupacion"] as? String ?? "", // ✅ Cargar ocupación
+                    edad: data["edad"] as? String,
+                    peso: data["peso"] as? String,
+                    estatura: data["estatura"] as? String,
+                    fechaCreacion: (data["fechaCreacion"] as? Timestamp)?.dateValue() ?? Date(),
+                    rol: data["rol"] as? String ?? "usuario"
+                )
+                
+                await MainActor.run {
+                    self.currentUserData = userData
+                    print("✅ Datos de usuario asignados al AuthManager")
+                    print("- Nombre: \(userData.nombre)")
+                    print("- Email: \(userData.email)")
+                    print("- Rol: \(userData.rol)")
+                    print("- Ocupación: \(userData.ocupacion)")
                 }
                 
-            } catch {
-                print("❌ Error cargando datos del usuario: \(error.localizedDescription)")
+            } else {
+                print("❌ No se encontró documento del usuario en Firestore")
+                print("- UID buscado: \(uid)")
+                print("- Document exists: \(document.exists)")
             }
+            
+        } catch {
+            print("❌ Error cargando datos del usuario: \(error.localizedDescription)")
         }
+    }
     
     func createUserWithFirestoreAndMembership(email: String, password: String, userData: UserData) async {
-           await MainActor.run {
-               self.isLoading = true
-               self.errorMessage = ""
-           }
-           
-           // Validaciones básicas
-           guard !email.isEmpty else {
-               await MainActor.run {
-                   self.errorMessage = "❌ Por favor, ingresa tu correo electrónico"
-                   self.isLoading = false
-               }
-               return
-           }
-           
-           guard !password.isEmpty else {
-               await MainActor.run {
-                   self.errorMessage = "❌ Por favor, ingresa tu contraseña"
-                   self.isLoading = false
-               }
-               return
-           }
-           
-           guard password.count >= 6 else {
-               await MainActor.run {
-                   self.errorMessage = "❌ La contraseña debe tener al menos 6 caracteres"
-                   self.isLoading = false
-               }
-               return
-           }
-
-           do {
-               // 1️⃣ Crear usuario en Firebase Auth
-               let result = try await Auth.auth().createUser(withEmail: email, password: password)
-               let uid = result.user.uid
-               print("✅ Usuario creado en Firebase Auth con UID: \(uid)")
-
-               // 2️⃣ Actualizar displayName en el perfil
-               if !userData.displayName.isEmpty {
-                   let changeRequest = result.user.createProfileChangeRequest()
-                   changeRequest.displayName = userData.displayName
-                   try await changeRequest.commitChanges()
-                   print("✅ DisplayName actualizado en Firebase Auth")
-               }
-
-               // 3️⃣ Obtener FCM token
-               print("📱 Obteniendo FCM token para el nuevo usuario...")
-               let fcmToken = await getFCMTokenForNewUser()
-               
-               // 4️⃣ Crear UserData actualizado con FCM token y edad calculada
-               var userDataWithFCM = UserData(
-                   uid: uid,
-                   email: userData.email,
-                   displayName: userData.displayName,
-                   idTipoDocumento: userData.idTipoDocumento,
-                   numeroDocumento: userData.numeroDocumento,
-                   nombre: userData.nombre,
-                   apellido: userData.apellido,
-                   telefono: userData.telefono,
-                   fechaNacimiento: userData.fechaNacimiento,
-                   direccion: userData.direccion,
-                   activo: userData.activo,
-                   idGenero: userData.idGenero,
-                   edad: userData.fechaNacimiento.calculateAgeString(), // ✅ EDAD CALCULADA AUTOMÁTICAMENTE
-                   peso: userData.peso,
-                   estatura: userData.estatura,
-                   fechaCreacion: userData.fechaCreacion,
-                   rol: userData.rol,
-                   fcmToken: fcmToken
-               )
-
-               // 5️⃣ Guardar en colección "usuarios"
-               let db = Firestore.firestore()
-               try await db.collection("usuarios").document(uid).setData(userDataWithFCM.dictionary)
-               print("✅ Usuario guardado en Firestore con edad calculada: \(userDataWithFCM.edad ?? "N/A")")
-               
-               // 6️⃣ ✨ NUEVO: Crear membresía inactiva automáticamente
-               await createDefaultMembership(for: userDataWithFCM, in: db)
-               
-               // 7️⃣ Enviar notificación de bienvenida
-               if let token = fcmToken {
-                   await sendWelcomeNotification(to: token, userName: userData.nombre)
-               }
-               
-               await MainActor.run {
-                   self.errorMessage = ""
-               }
-           } catch {
-               await MainActor.run {
-                   self.errorMessage = self.translateFirebaseError(error)
-                   print("❌ Error creando usuario: \(error.localizedDescription)")
-               }
-           }
-
-           await MainActor.run {
-               self.isLoading = false
-           }
-       }
+        await MainActor.run {
+            self.isLoading = true
+            self.errorMessage = ""
+        }
         
-        // ✨ NUEVA FUNCIÓN: Crear membresía por defecto
-    private func createDefaultMembership(for userData: UserData, in db: Firestore) async {
-            do {
-                // ✅ CORRECCIÓN 1: Crear diccionario sin valores nil
-                var defaultMembership: [String: Any] = [
-                    "userUID": userData.uid,
-                    "email": userData.email,
-                    "tipoMembresia": "Básica",
-                    "precio": 70000.0,
-                    "fechaInicio": "",
-                    "fechaVencimiento": "",
-                    "activa": false,
-                    "estadoDescripcion": "Pendiente de Activación",
-                    "fechaCreacion": Timestamp(),
-                    "requiereActivacion": true
-                ]
-                
-                // ✅ CORRECCIÓN 2: Solo agregamos diasRestantes si tiene valor
-                // En este caso, para membresías inactivas, simplemente no lo incluimos
-                
-                // Generar ID único para la membresía
-                let membershipRef = db.collection("membresias").document()
-                try await membershipRef.setData(defaultMembership)
-                
-                print("✅ Membresía inactiva creada para usuario: \(userData.nombre)")
-                
-            } catch {
-                print("❌ Error creando membresía por defecto: \(error.localizedDescription)")
+        // Validaciones básicas
+        guard !email.isEmpty else {
+            await MainActor.run {
+                self.errorMessage = "❌ Por favor, ingresa tu correo electrónico"
+                self.isLoading = false
+            }
+            return
+        }
+        
+        guard !password.isEmpty else {
+            await MainActor.run {
+                self.errorMessage = "❌ Por favor, ingresa tu contraseña"
+                self.isLoading = false
+            }
+            return
+        }
+        
+        guard password.count >= 6 else {
+            await MainActor.run {
+                self.errorMessage = "❌ La contraseña debe tener al menos 6 caracteres"
+                self.isLoading = false
+            }
+            return
+        }
+
+        do {
+            // 1️⃣ Crear usuario en Firebase Auth
+            let result = try await Auth.auth().createUser(withEmail: email, password: password)
+            let uid = result.user.uid
+            print("✅ Usuario creado en Firebase Auth con UID: \(uid)")
+
+            // 2️⃣ Actualizar displayName en el perfil
+            if !userData.displayName.isEmpty {
+                let changeRequest = result.user.createProfileChangeRequest()
+                changeRequest.displayName = userData.displayName
+                try await changeRequest.commitChanges()
+                print("✅ DisplayName actualizado en Firebase Auth")
+            }
+
+            // 3️⃣ Obtener FCM token
+            print("📱 Obteniendo FCM token para el nuevo usuario...")
+            let fcmToken = await getFCMTokenForNewUser()
+            
+            // 4️⃣ Crear UserData actualizado con FCM token y edad calculada
+            let userDataWithFCM = UserData(
+                uid: uid,
+                email: userData.email,
+                displayName: userData.displayName,
+                idTipoDocumento: userData.idTipoDocumento,
+                numeroDocumento: userData.numeroDocumento,
+                nombre: userData.nombre,
+                apellido: userData.apellido,
+                telefono: userData.telefono,
+                fechaNacimiento: userData.fechaNacimiento,
+                direccion: userData.direccion,
+                activo: userData.activo,
+                idGenero: userData.idGenero,
+                ocupacion: userData.ocupacion, // ✅ Guardar ocupación
+                edad: userData.fechaNacimiento.calculateAgeString(), // ✅ EDAD CALCULADA AUTOMÁTICAMENTE
+                peso: userData.peso,
+                estatura: userData.estatura,
+                fechaCreacion: userData.fechaCreacion,
+                rol: userData.rol,
+                fcmToken: fcmToken
+            )
+
+            // 5️⃣ Guardar en colección "usuarios"
+            let db = Firestore.firestore()
+            try await db.collection("usuarios").document(uid).setData(userDataWithFCM.dictionary)
+            print("✅ Usuario guardado en Firestore con ocupación: \(userDataWithFCM.ocupacion) y edad: \(userDataWithFCM.edad ?? "N/A")")
+            
+            // 6️⃣ Crear membresía inactiva automáticamente
+            await createDefaultMembership(for: userDataWithFCM, in: db)
+            
+            // 7️⃣ Enviar notificación de bienvenida
+            if let token = fcmToken {
+                await sendWelcomeNotification(to: token, userName: userData.nombre)
+            }
+            
+            await MainActor.run {
+                self.errorMessage = ""
+            }
+        } catch {
+            await MainActor.run {
+                self.errorMessage = self.translateFirebaseError(error)
+                print("❌ Error creando usuario: \(error.localizedDescription)")
             }
         }
+
+        await MainActor.run {
+            self.isLoading = false
+        }
+    }
+        
+    // ✨ NUEVA FUNCIÓN: Crear membresía por defecto
+    private func createDefaultMembership(for userData: UserData, in db: Firestore) async {
+        do {
+            let defaultMembership: [String: Any] = [
+                "userUID": userData.uid,
+                "email": userData.email,
+                "tipoMembresia": "Básica",
+                "precio": 70000.0,
+                "fechaInicio": "",
+                "fechaVencimiento": "",
+                "activa": false,
+                "estadoDescripcion": "Pendiente de Activación",
+                "fechaCreacion": Timestamp(),
+                "requiereActivacion": true
+            ]
+            
+            let membershipRef = db.collection("membresias").document()
+            try await membershipRef.setData(defaultMembership)
+            print("✅ Membresía inactiva creada para usuario: \(userData.nombre)")
+        } catch {
+            print("❌ Error creando membresía por defecto: \(error.localizedDescription)")
+        }
+    }
     
     // ✅ FUNCIÓN PARA TRADUCIR ERRORES DE FIREBASE
     private func translateFirebaseError(_ error: Error) -> String {
@@ -601,9 +800,7 @@ class AuthManager: ObservableObject {
         case .internalError:
             return "❌ Error interno del servidor. Intenta más tarde"
         
-        case .invalidUserToken:
-            return "❌ Tu sesión ha expirado. Inicia sesión nuevamente"
-        case .userTokenExpired:
+        case .invalidUserToken, .userTokenExpired:
             return "❌ Tu sesión ha expirado. Inicia sesión nuevamente"
         
         // Errores de recuperación de contraseña
@@ -759,7 +956,7 @@ class AuthManager: ObservableObject {
             let fcmToken = await getFCMTokenForNewUser()
             
             // 4️⃣ Crear UserData actualizado con FCM token y edad calculada
-            var userDataWithFCM = UserData(
+            let userDataWithFCM = UserData(
                 uid: uid,
                 email: userData.email,
                 displayName: userData.displayName,
@@ -772,6 +969,7 @@ class AuthManager: ObservableObject {
                 direccion: userData.direccion,
                 activo: userData.activo,
                 idGenero: userData.idGenero,
+                ocupacion: userData.ocupacion, // ✅ Guardar ocupación
                 edad: userData.fechaNacimiento.calculateAgeString(), // ✅ EDAD CALCULADA AUTOMÁTICAMENTE
                 peso: userData.peso,
                 estatura: userData.estatura,
@@ -784,7 +982,7 @@ class AuthManager: ObservableObject {
             let db = Firestore.firestore()
             try await db.collection("usuarios").document(uid).setData(userDataWithFCM.dictionary)
 
-            print("✅ Usuario guardado en Firestore con FCM token: \(fcmToken?.prefix(20) ?? "nil")... y edad: \(userDataWithFCM.edad ?? "N/A")")
+            print("✅ Usuario guardado en Firestore con FCM token: \(fcmToken?.prefix(20) ?? "nil")... ocupación: \(userDataWithFCM.ocupacion) y edad: \(userDataWithFCM.edad ?? "N/A")")
             
             // 6️⃣ Enviar notificación de bienvenida
             if let token = fcmToken {
@@ -871,7 +1069,7 @@ class AuthManager: ObservableObject {
         do {
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
             
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await URLSession.shared.data(for: request)
             
             if let httpResponse = response as? HTTPURLResponse {
                 if httpResponse.statusCode == 200 {
@@ -957,6 +1155,7 @@ struct LoginView: View {
     @State private var fechaNacimiento = Date()
     @State private var activo = true
     @State private var idGenero = 1
+    @State private var ocupacion = "" // ✅ NUEVO: selección obligatoria
     
     // Campos para registro - Información Física (edad se calculará automáticamente)
     @State private var peso = ""
@@ -975,6 +1174,25 @@ struct LoginView: View {
     let generos = [
         (1, "Masculino"),
         (2, "Femenino")
+    ]
+    
+    // ✅ Opciones de ocupación (lista cerrada)
+    let ocupaciones = [
+        "Estudiante",
+        "Empleado",
+        "Independiente",
+        "Desempleado",
+        "Jubilado",
+        "Hogar",
+        "Médico",
+        "Ingeniero",
+        "Abogado",
+        "Profesor",
+        "Enfermero",
+        "Arquitecto",
+        "Contador",
+        "Diseñador",
+        "Técnico"
     ]
     
     // ✅ COMPUTED PROPERTY para edad calculada
@@ -1022,6 +1240,11 @@ struct LoginView: View {
         
         if telefono.count < 7 {
             return (false, "❌ El teléfono debe tener al menos 7 dígitos")
+        }
+        
+        // ✅ VALIDACIÓN DE OCUPACIÓN OBLIGATORIA
+        if ocupacion.isEmpty {
+            return (false, "❌ La ocupación es obligatoria")
         }
         
         // ✅ VALIDACIÓN DE EDAD CALCULADA
@@ -1211,6 +1434,14 @@ struct LoginView: View {
                                         selection: $idGenero,
                                         options: generos
                                     )
+                                    
+                                    // ✅ NUEVO: Ocupación (obligatoria)
+                                    CustomSearchablePicker(
+                                        placeholder: "Ocupación",
+                                        icon: "briefcase.fill",
+                                        selection: $ocupacion,
+                                        options: ocupaciones.map { ($0, $0) }
+                                    )
                                 }
                                 .padding(.bottom, 10)
                                 
@@ -1252,8 +1483,6 @@ struct LoginView: View {
                                         Spacer()
                                     }
                                     .padding(.horizontal, 5)
-                                    
-                                    // ✅ REMOVIDO: Campo manual de edad - ahora es automático
                                     
                                     CustomTextField(
                                         placeholder: "Peso (kg)",
@@ -1306,7 +1535,6 @@ struct LoginView: View {
                                     keyboardType: .emailAddress
                                 )
                                 
-                                
                                 CustomSecureField(
                                     placeholder: "Contraseña",
                                     text: $password,
@@ -1348,43 +1576,44 @@ struct LoginView: View {
                             Task {
                                 if isSignUp {
                                     let validation = validateRegistrationFields()
-                                                if !validation.isValid {
-                                                    authManager.errorMessage = validation.errorMessage
-                                                    return
-                                                }
-                                                
-                                                // Limpiar mensaje de error si todo está bien
-                                                authManager.errorMessage = ""
+                                    if !validation.isValid {
+                                        authManager.errorMessage = validation.errorMessage
+                                        return
+                                    }
                                     
-                                            print("🎯 INICIANDO REGISTRO DESDE BUTTON")
-                                            
-                                            // ✅ CREAR OBJETO UserData SIN EDAD MANUAL - se calculará automáticamente
-                                            let userData = UserData(
-                                                uid: "", // Se asignará automáticamente en signUp
-                                                email: email,
-                                                displayName: "\(nombre) \(apellido)",
-                                                idTipoDocumento: idTipoDocumento,
-                                                numeroDocumento: numeroDocumento,
-                                                nombre: nombre,
-                                                apellido: apellido,
-                                                telefono: telefono,
-                                                fechaNacimiento: fechaNacimiento,
-                                                direccion: "",
-                                                activo: activo,
-                                                idGenero: idGenero,
-                                                edad: nil, // ✅ SE CALCULARÁ AUTOMÁTICAMENTE EN AuthManager
-                                                peso: peso.isEmpty ? nil : peso,
-                                                estatura: estatura.isEmpty ? nil : estatura,
-                                                fechaCreacion: Date(),
-                                                rol: "usuario"
-                                            )
-                                            
-                                            print("🎯 DATOS PREPARADOS, LLAMANDO A createUserWithFirestoreAndMembership")
-                                            print("🎯 Edad que se calculará: \(fechaNacimiento.calculateAge()) años")
-                                            
-                                            // ✅ NUEVA FUNCIÓN QUE CREA USUARIO + MEMBRESÍA INACTIVA
-                                            await authManager.createUserWithFirestoreAndMembership(email: email, password: password, userData: userData)
-                                            print("🎯 createUserWithFirestoreAndMembership COMPLETADO")
+                                    // Limpiar mensaje de error si todo está bien
+                                    authManager.errorMessage = ""
+                                    
+                                    print("🎯 INICIANDO REGISTRO DESDE BUTTON")
+                                    
+                                    // ✅ CREAR OBJETO UserData con ocupación obligatoria
+                                    let userData = UserData(
+                                        uid: "", // Se asignará automáticamente en signUp
+                                        email: email,
+                                        displayName: "\(nombre) \(apellido)",
+                                        idTipoDocumento: idTipoDocumento,
+                                        numeroDocumento: numeroDocumento,
+                                        nombre: nombre,
+                                        apellido: apellido,
+                                        telefono: telefono,
+                                        fechaNacimiento: fechaNacimiento,
+                                        direccion: "",
+                                        activo: activo,
+                                        idGenero: idGenero,
+                                        ocupacion: ocupacion, // ✅ Ocupación obligatoria
+                                        edad: nil, // ✅ Se calculará automáticamente en AuthManager
+                                        peso: peso.isEmpty ? nil : peso,
+                                        estatura: estatura.isEmpty ? nil : estatura,
+                                        fechaCreacion: Date(),
+                                        rol: "usuario"
+                                    )
+                                    
+                                    print("🎯 DATOS PREPARADOS, LLAMANDO A createUserWithFirestoreAndMembership")
+                                    print("🎯 Edad que se calculará: \(fechaNacimiento.calculateAge()) años")
+                                    
+                                    // ✅ NUEVA FUNCIÓN QUE CREA USUARIO + MEMBRESÍA INACTIVA
+                                    await authManager.createUserWithFirestoreAndMembership(email: email, password: password, userData: userData)
+                                    print("🎯 createUserWithFirestoreAndMembership COMPLETADO")
                                 } else {
                                     await authManager.signIn(email: email, password: password)
                                 }
@@ -1410,10 +1639,10 @@ struct LoginView: View {
                             )
                             .foregroundColor(.brandBlack)
                         }
-                        .disabled(authManager.isLoading || email.isEmpty || password.isEmpty || (isSignUp && (nombre.isEmpty || apellido.isEmpty || numeroDocumento.isEmpty)))
-                                                .opacity((email.isEmpty || password.isEmpty || (isSignUp && (nombre.isEmpty || apellido.isEmpty || numeroDocumento.isEmpty))) ? 0.6 : 1.0)
-                                                .scaleEffect(authManager.isLoading ? 0.95 : 1.0)
-                                                .animation(.spring(), value: authManager.isLoading)
+                        .disabled(authManager.isLoading || email.isEmpty || password.isEmpty || (isSignUp && (nombre.isEmpty || apellido.isEmpty || numeroDocumento.isEmpty || ocupacion.isEmpty)))
+                        .opacity((email.isEmpty || password.isEmpty || (isSignUp && (nombre.isEmpty || apellido.isEmpty || numeroDocumento.isEmpty || ocupacion.isEmpty))) ? 0.6 : 1.0)
+                        .scaleEffect(authManager.isLoading ? 0.95 : 1.0)
+                        .animation(.spring(), value: authManager.isLoading)
                         
                         // Link de recuperación de contraseña
                         if !isSignUp {
@@ -1447,6 +1676,6 @@ struct LoginView: View {
         .animation(.easeInOut, value: authManager.errorMessage)
         .sheet(isPresented: $showForgotPassword) {
             ProductionPasswordResetView() // En lugar de PasswordResetView()
-                }
+        }
     }
 }
