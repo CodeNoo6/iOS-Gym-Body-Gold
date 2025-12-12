@@ -15,6 +15,7 @@ class AuthManager: ObservableObject {
     @Published var isLoading = false
     @Published var errorMessage = ""
     @Published var isAuthenticated = false
+    @Published var userOccupation = ""
     
     private var authStateHandle: AuthStateDidChangeListenerHandle?
     
@@ -24,6 +25,13 @@ class AuthManager: ObservableObject {
             DispatchQueue.main.async {
                 self?.user = user
                 self?.isAuthenticated = user != nil
+                if user != nil {
+                    Task {
+                        await self?.fetchOccupation()
+                    }
+                } else {
+                    self?.userOccupation = ""
+                }
             }
         }
     }
@@ -170,6 +178,42 @@ class AuthManager: ObservableObject {
             return "Error de conexión"
         default:
             return error.localizedDescription
+        }
+    }
+    
+    // MARK: - Occupation Management
+    func fetchOccupation() async {
+        guard let user = user else { return }
+        let db = Firestore.firestore()
+        
+        do {
+            let document = try await db.collection("administrators").document(user.uid).getDocument()
+            if let data = document.data(), let occupation = data["ocupacion"] as? String {
+                self.userOccupation = occupation
+            } else {
+                self.userOccupation = ""
+            }
+        } catch {
+            print("Error fetching occupation: \(error)")
+        }
+    }
+    
+    func updateOccupation(occupation: String) async -> Bool {
+        guard let user = user else { return false }
+        isLoading = true
+        
+        do {
+            let db = Firestore.firestore()
+            try await db.collection("administrators").document(user.uid).updateData([
+                "ocupacion": occupation
+            ])
+            self.userOccupation = occupation
+            isLoading = false
+            return true
+        } catch {
+            print("Error updating occupation: \(error)")
+            isLoading = false
+            return false
         }
     }
 }

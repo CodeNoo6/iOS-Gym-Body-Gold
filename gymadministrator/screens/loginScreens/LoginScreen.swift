@@ -754,7 +754,8 @@ class AuthManager: ObservableObject {
                 "activa": false,
                 "estadoDescripcion": "Pendiente de Activación",
                 "fechaCreacion": Timestamp(),
-                "requiereActivacion": true
+                "requiereActivacion": true,
+                "ocupacion": userData.ocupacion
             ]
             
             let membershipRef = db.collection("membresias").document()

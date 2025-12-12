@@ -130,6 +130,12 @@ struct MiembroRowView: View {
                 Text(miembro.email)
                     .font(.subheadline)
                     .foregroundColor(.secondary)
+
+                if let ocupacion = miembro.ocupacion, !ocupacion.isEmpty {
+                    Text(ocupacion)
+                        .font(.caption)
+                        .foregroundColor(.gray)
+                }
                 
                 HStack {
                     Text(miembro.tipoDocumentoDescripcion)
@@ -192,6 +198,7 @@ struct AddEditMiembroView: View {
     @State private var apellido = ""
     @State private var email = ""
     @State private var telefono = ""
+    @State private var ocupacion = ""
     @State private var direccion = ""
     @State private var numeroDocumento = ""
     @State private var cedula = ""
@@ -217,6 +224,7 @@ struct AddEditMiembroView: View {
             _apellido = State(initialValue: miembro.apellido)
             _email = State(initialValue: miembro.email)
             _telefono = State(initialValue: miembro.telefono ?? "")
+            _ocupacion = State(initialValue: miembro.ocupacion ?? "")
             _direccion = State(initialValue: miembro.direccion ?? "")
             _numeroDocumento = State(initialValue: miembro.numeroDocumento)
             _cedula = State(initialValue: miembro.cedula)
@@ -239,6 +247,7 @@ struct AddEditMiembroView: View {
                         .autocapitalization(.none)
                     TextField("Teléfono", text: $telefono)
                         .keyboardType(.phonePad)
+                    TextField("Ocupación", text: $ocupacion)
                     TextField("Dirección", text: $direccion)
                 }
                 
@@ -341,7 +350,8 @@ struct AddEditMiembroView: View {
             peso: peso,
             estatura: estatura,
             cedula: cedula,
-            activo: miembro?.activo ?? true
+            activo: miembro?.activo ?? true,
+            ocupacion: ocupacion.isEmpty ? nil : ocupacion
         )
         
         let (isValid, errorMessage) = newMiembro.isValid()
@@ -462,6 +472,7 @@ struct MiembroDetailView: View {
                     InfoCard(title: "Información Personal", icon: "person.fill") {
                         InfoRow(label: "Nombre completo", value: miembro.nombreCompleto)
                         InfoRow(label: "Email", value: miembro.email)
+                        InfoRow(label: "Ocupación", value: miembro.ocupacion ?? "No especificada")
                         InfoRow(label: "Teléfono", value: miembro.telefono ?? "No especificado")
                         InfoRow(label: "Dirección", value: miembro.direccion ?? "No especificada")
                         InfoRow(label: "Fecha de nacimiento", value: miembro.fechaNacimiento ?? "No especificada")

@@ -2596,6 +2596,8 @@ struct IAChatCard: View {
         let duracionDias: Int?
         let fechaActivacion: Date?
         
+        var ocupacion: String?
+        
         // ✅ NUEVOS CAMPOS PARA PRECIOS PERSONALIZADOS
         let precioPersonalizado: Double?
         let precioOriginal: Double?
@@ -2626,6 +2628,8 @@ struct IAChatCard: View {
                     } else {
                         self.userName = String(self.email.split(separator: "@").first ?? "Usuario")
                     }
+            
+            self.ocupacion = data["ocupacion"] as? String
             
             self.tipoMembresia = data["tipoMembresia"] as? String ?? "Básica"
             self.precio = data["precio"] as? Double ?? 0.0
@@ -2659,6 +2663,9 @@ struct IAChatCard: View {
         
         mutating func updateUserName(_ newUserName: String) {
                 self.userName = newUserName
+            }
+        mutating func updateOcupacion(_ newOcupacion: String) {
+                self.ocupacion = newOcupacion
             }
     }
 
@@ -3325,292 +3332,279 @@ struct IAChatCard: View {
         }
     }
 
-    struct EnhancedMembershipRow: View {
-        let membership: MembershipData
-        @ObservedObject var manager: AdminMembershipManager
-        @State private var isToggling = false
-        @State private var showingActivationSheet = false
-        @State private var isDirectActivating = false
-        
-        var body: some View {
-            HStack(spacing: 16) {
-                // Avatar con indicador de estado
-                ZStack {
-                    Circle()
-                        .fill(membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
-                        .frame(width: 50, height: 50)
-                    
-                    Image(systemName: membership.activa ? "creditcard.fill" : "creditcard.trianglebadge.exclamationmark")
-                        .font(.title3)
-                        .foregroundColor(membership.activa ? .green : .orange)
-                    
-                    // Indicador de precio personalizado
-                    if membership.hasCustomPrice {
-                        VStack {
-                            Spacer()
-                            HStack {
-                                Spacer()
-                                Circle()
-                                    .fill(Color.brandGold)
-                                    .frame(width: 12, height: 12)
-                                    .overlay(
-                                        Text("$")
-                                            .font(.caption2)
-                                            .fontWeight(.bold)
-                                            .foregroundColor(.brandBlack)
-                                    )
-                            }
-                        }
-                        .frame(width: 50, height: 50)
-                    }
-                }
-                
-                // Información
-                VStack(alignment: .leading, spacing: 6) {
-                            Text(membership.userName)
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.brandLight)
-                                .lineLimit(nil) // ✅ Permitir múltiples líneas
-                                .fixedSize(horizontal: false, vertical: true) // ✅ Expansión vertical
-                            
-                            // ✅ EMAIL - Más pequeño y discreto
-                            Text(membership.email)
-                                .font(.caption2)
-                                .foregroundColor(.brandLight.opacity(0.5))
-                                .lineLimit(2) // ✅ Máximo 2 líneas para email
-                                .fixedSize(horizontal: false, vertical: true)
-                                
-                                Text(membership.tipoMembresia)
-                                    .font(.caption)
-                                    .foregroundColor(.brandGold)
-                                
-                                Text(membership.estadoDescripcion)
-                                    .font(.caption2)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 2)
-                                    .background(
-                                        membership.activa ? Color.green.opacity(0.2) : Color.orange.opacity(0.2)
-                                    )
-                                    .foregroundColor(membership.activa ? .green : .orange)
-                                    .cornerRadius(6)
-                                
-                                if membership.activa, let dias = membership.diasRestantes {
-                                    Text("\(dias)d")
-                                        .font(.caption2)
-                                        .foregroundColor(.brandLight.opacity(0.7))
-                                }
-                                
-                                if !membership.activa, let diasRestantes = membership.diasRestantes, diasRestantes > 0 {
-                                    HStack(spacing: 4) {
-                                        Image(systemName: "clock.badge.checkmark")
-                                            .foregroundColor(.orange)
-                                            .font(.caption2)
-                                        Text("\(diasRestantes)d preservados")
-                                            .font(.caption2)
-                                            .foregroundColor(.orange)
-                                    }
-                                }
-                                
-                                if let metodoPago = membership.metodoPago {
-                                    Text(metodoPago.capitalized)
-                                        .font(.caption2)
-                                        .foregroundColor(.brandLight.opacity(0.6))
-                                }
-                            }
-                
-                Spacer()
-                
-                // Controles
-                VStack(spacing: 8) {
-                    // Precio (con indicador de personalización)
-                    VStack(spacing: 2) {
-                        if let precioPersonalizado = membership.precioPersonalizado {
-                            Text("$\(Int(precioPersonalizado).formatted())")
-                                .font(.caption)
-                                .fontWeight(.bold)
-                                .foregroundColor(.brandGold)
-                        } else {
-                            Text("$\(Int(membership.finalDisplayPrice).formatted())")
-                                .font(.caption)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.brandGold)
-                        }
-                    }
-                    
-                    // Botón de acción
-                    if membership.activa {
-                        Button(action: {
-                            Task {
-                                await suspendMembership()
-                            }
-                        }) {
-                            HStack(spacing: 4) {
-                                if isToggling {
-                                    ProgressView()
-                                        .progressViewStyle(CircularProgressViewStyle(tint: .brandWhite))
-                                        .scaleEffect(0.7)
-                                } else {
-                                    Image(systemName: "pause.circle.fill")
-                                        .font(.caption)
-                                    Text("Suspender")
-                                        .font(.caption2)
-                                        .fontWeight(.semibold)
-                                }
-                            }
-                            .foregroundColor(.brandWhite)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(Color.red.opacity(0.8))
-                            .cornerRadius(6)
-                        }
-                        .disabled(isToggling)
-                    } else {
-                        Button(action: {
-                            if let diasRestantes = membership.diasRestantes, diasRestantes > 0 {
-                                                    print("🚀 Activación directa - tiene \(diasRestantes) días preservados")
-                                                    Task {
-                                                        await activateDirectlyWithPreservedDays()
-                                                    }
-                                                } else {
-                                                    print("📋 Abriendo modal de configuración")
-                                                    showingActivationSheet = true
-                                                }
-                                            }) {
-                                                HStack(spacing: 4) {
-                                                    if isDirectActivating {
-                                                        ProgressView()
-                                                            .progressViewStyle(CircularProgressViewStyle(tint: .brandWhite))
-                                                            .scaleEffect(0.7)
-                                                    } else {
-                                                        Image(systemName: membership.diasRestantes != nil && membership.diasRestantes! > 0 ? "play.circle.fill" : "gear.circle.fill")
-                                                            .font(.caption)
-                                                        Text(membership.diasRestantes != nil && membership.diasRestantes! > 0 ? "Reactivar" : "Configurar")
-                                                            .font(.caption2)
-                                                            .fontWeight(.semibold)
-                                                    }
-                                                }
-                                                .foregroundColor(.brandWhite)
-                                                .padding(.horizontal, 8)
-                                                .padding(.vertical, 4)
-                                                .background(
-                                                    membership.diasRestantes != nil && membership.diasRestantes! > 0 ?
-                                                    Color.blue.opacity(0.8) : Color.green.opacity(0.8)
-                                                )
-                                                .cornerRadius(6)
-                                            }
-                                            .disabled(isDirectActivating)
-                    }
-                }
-            }
-            .padding(12)
-            .background(Color.brandBlack.opacity(0.3))
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(membership.activa ? Color.green.opacity(0.3) : Color.orange.opacity(0.3), lineWidth: 1)
-            )
-            .scaleEffect(isToggling ? 0.97 : 1.0)
-            .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isToggling)
-            .sheet(isPresented: $showingActivationSheet) {
-                EnhancedMembershipActivationSheet(membership: membership, manager: manager)
-            }
+struct EnhancedMembershipRow: View {
+    let membership: MembershipData
+    @ObservedObject var manager: AdminMembershipManager
+    @State private var isToggling = false
+    @State private var isDirectActivating = false
+    @State private var showingActivationSheet = false
+
+    // MARK: BODY
+    var body: some View {
+        HStack(spacing: 16) {
+            avatarView
+            userInfoView
+            Spacer()
+            controlsView
         }
-        
-        private func activateDirectlyWithPreservedDays() async {
-                guard let diasRestantes = membership.diasRestantes, diasRestantes > 0 else {
-                    print("❌ No hay días restantes para reactivar")
-                    return
-                }
-                
-                isDirectActivating = true
-                
-                print("🔄 REACTIVACIÓN DIRECTA CON DÍAS PRESERVADOS:")
-                print("====================================")
-                print("📧 Email: \(membership.email)")
-                print("⏰ Días a restaurar: \(diasRestantes)")
-                print("💰 Sin cobro adicional - solo reactivación")
-                print("📋 Método de pago previo: \(membership.metodoPago ?? "efectivo")")
-                print("====================================")
-                
-                await manager.reactivateMembershipPreservingDays(
-                    membershipId: membership.id,
-                    userEmail: membership.email
-                )
-                
-                print("ℹ️ Reactivación completada - No se genera transacción (sin cobro)")
-                
-                // Delay para mejor UX
-                try? await Task.sleep(nanoseconds: 1_000_000_000)
-                
-                isDirectActivating = false
-                
-                print("✅ Reactivación directa completada")
-            }
-        
-        private var enhancedPriceDisplay: some View {
-                VStack(spacing: 2) {
-                    // Precio final
-                    Text("$\(Int(membership.finalDisplayPrice).formatted())")
-                        .font(.caption)
-                        .fontWeight(.bold)
-                        .foregroundColor(.brandGold)
-                    
-                    // Información adicional de precio
-                    if membership.hasCustomPrice {
-                        if let precioOriginal = membership.precioOriginal {
-                            Text("Era $\(Int(precioOriginal).formatted())")
-                                .font(.caption2)
-                                .foregroundColor(.brandLight.opacity(0.6))
-                                .strikethrough()
-                        }
-                    }
-                }
-            }
-        
-        private func recordDirectActivationTransaction() async {
-                guard let diasRestantes = membership.diasRestantes, diasRestantes > 0 else { return }
-                
-                let adminUserId = Auth.auth().currentUser?.uid ?? "system"
-                let adminUserName = "Sistema Auto" // Puedes personalizar esto
-                let userName = membership.email.components(separatedBy: "@").first ?? "Usuario"
-                
-                let success = await RevenueManager.shared.recordTransaction(
-                    userEmail: membership.email,
-                    userName: userName,
-                    membershipType: membership.tipoMembresia,
-                    originalPrice: membership.precio,
-                    customPrice: membership.precioPersonalizado,
-                    duration: diasRestantes,
-                    transactionType: "reactivation", // ✅ Nuevo tipo
-                    paymentMethod: membership.metodoPago ?? "efectivo",
-                    membershipStartDate: Date(),
-                    membershipEndDate: Calendar.current.date(byAdding: .day, value: diasRestantes, to: Date()) ?? Date(),
-                    adminUserId: adminUserId,
-                    adminUserName: adminUserName,
-                    notes: "Reactivación automática con \(diasRestantes) días preservados"
-                )
-                
-                if success {
-                    print("✅ Transacción de reactivación registrada")
-                } else {
-                    print("❌ Error registrando transacción de reactivación")
-                }
-            }
-        
-        private func suspendMembership() async {
-            isToggling = true
-            
-            await manager.toggleMembershipStatus(
-                membershipId: membership.id,
-                userEmail: membership.email,
-                currentStatus: membership.activa
-            )
-            
-            try? await Task.sleep(nanoseconds: 500_000_000)
-            isToggling = false
+        .padding(12)
+        .background(Color.brandBlack.opacity(0.3))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(membership.activa ? Color.green.opacity(0.3) : Color.orange.opacity(0.3), lineWidth: 1)
+        )
+        .scaleEffect(isToggling ? 0.97 : 1)
+        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isToggling)
+        .sheet(isPresented: $showingActivationSheet) {
+            EnhancedMembershipActivationSheet(membership: membership, manager: manager)
         }
     }
+}
+
+private extension EnhancedMembershipRow {
+    var avatarView: some View {
+        ZStack {
+            Circle()
+                .fill(membership.activa ? Color.green.opacity(0.2) :
+                        Color.orange.opacity(0.2))
+                .frame(width: 50, height: 50)
+
+            Image(systemName: membership.activa ?
+                    "creditcard.fill" :
+                    "creditcard.trianglebadge.exclamationmark")
+                .font(.title3)
+                .foregroundColor(membership.activa ? .green : .orange)
+
+            if membership.hasCustomPrice {
+                VStack {
+                    Spacer()
+                    HStack {
+                        Spacer()
+                        Circle()
+                            .fill(Color.brandGold)
+                            .frame(width: 12, height: 12)
+                            .overlay(
+                                Text("$")
+                                    .font(.caption2)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.brandBlack)
+                            )
+                    }
+                }
+                .frame(width: 50, height: 50)
+            }
+        }
+    }
+}
+
+private extension EnhancedMembershipRow {
+    var userInfoView: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(membership.userName)
+                .font(.subheadline)
+                .fontWeight(.semibold)
+                .foregroundColor(.brandLight)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let ocupacion = membership.ocupacion, !ocupacion.isEmpty {
+                Text(ocupacion)
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.brandBlack)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 3)
+                    .background(Color.brandGold.opacity(0.85))
+                    .cornerRadius(12)
+            }
+            Text(membership.email)
+                .font(.caption2)
+                .foregroundColor(.brandLight.opacity(0.5))
+                .lineLimit(2)
+
+            Text(membership.tipoMembresia)
+                .font(.caption)
+                .foregroundColor(.brandGold)
+
+            stateTag
+            preservedDaysView
+            paymentMethodView
+        }
+    }
+
+    var stateTag: some View {
+        Text(membership.estadoDescripcion)
+            .font(.caption2)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(membership.activa ?
+                        Color.green.opacity(0.2) :
+                        Color.orange.opacity(0.2))
+            .foregroundColor(membership.activa ? .green : .orange)
+            .cornerRadius(6)
+    }
+
+    var preservedDaysView: some View {
+        Group {
+            if membership.activa, let dias = membership.diasRestantes {
+                Text("\(dias)d")
+                    .font(.caption2)
+                    .foregroundColor(.brandLight.opacity(0.7))
+            }
+
+            if !membership.activa,
+               let diasRestantes = membership.diasRestantes,
+               diasRestantes > 0 {
+                HStack(spacing: 4) {
+                    Image(systemName: "clock.badge.checkmark")
+                        .foregroundColor(.orange)
+                        .font(.caption2)
+
+                    Text("\(diasRestantes)d preservados")
+                        .font(.caption2)
+                        .foregroundColor(.orange)
+                }
+            }
+        }
+    }
+
+    var paymentMethodView: some View {
+        Group {
+            if let metodo = membership.metodoPago {
+                Text(metodo.capitalized)
+                    .font(.caption2)
+                    .foregroundColor(.brandLight.opacity(0.6))
+            }
+        }
+    }
+}
+
+private extension EnhancedMembershipRow {
+    var controlsView: some View {
+        VStack(spacing: 8) {
+            priceView
+            Group {
+                if membership.activa {
+                    suspendButton
+                } else {
+                    activateButton
+                }
+            }
+        }
+    }
+
+    var priceView: some View {
+        VStack(spacing: 2) {
+            Text("$\(Int(membership.finalDisplayPrice).formatted())")
+                .font(.caption)
+                .fontWeight(.bold)
+                .foregroundColor(.brandGold)
+
+            if membership.hasCustomPrice,
+               let original = membership.precioOriginal {
+                Text("Era $\(Int(original).formatted())")
+                    .font(.caption2)
+                    .foregroundColor(.brandLight.opacity(0.6))
+                    .strikethrough()
+            }
+        }
+    }
+}
+
+private extension EnhancedMembershipRow {
+    var suspendButton: some View {
+        Button {
+            Task { await suspendMembership() }
+        } label: {
+            HStack(spacing: 4) {
+                if isToggling {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .brandWhite))
+                        .scaleEffect(0.7)
+                } else {
+                    Image(systemName: "pause.circle.fill")
+                    Text("Suspender")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                }
+            }
+            .foregroundColor(.brandWhite)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.red.opacity(0.8))
+            .cornerRadius(6)
+        }
+        .disabled(isToggling)
+    }
+
+    var activateButton: some View {
+        Button {
+            if let dias = membership.diasRestantes, dias > 0 {
+                Task { await activateDirectlyWithPreservedDays() }
+            } else {
+                showingActivationSheet = true
+            }
+        } label: {
+            HStack(spacing: 4) {
+                if isDirectActivating {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .brandWhite))
+                        .scaleEffect(0.7)
+                } else {
+                    Image(systemName:
+                            (membership.diasRestantes ?? 0) > 0 ?
+                            "play.circle.fill" :
+                            "gear.circle.fill")
+
+                    Text((membership.diasRestantes ?? 0) > 0 ?
+                         "Reactivar" : "Configurar")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                }
+            }
+            .foregroundColor(.brandWhite)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(
+                (membership.diasRestantes ?? 0) > 0 ?
+                Color.blue.opacity(0.8) :
+                Color.green.opacity(0.8)
+            )
+            .cornerRadius(6)
+        }
+        .disabled(isDirectActivating)
+    }
+}
+
+private extension EnhancedMembershipRow {
+
+    func suspendMembership() async {
+        isToggling = true
+
+        await manager.toggleMembershipStatus(
+            membershipId: membership.id,
+            userEmail: membership.email,
+            currentStatus: membership.activa
+        )
+
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        isToggling = false
+    }
+
+    func activateDirectlyWithPreservedDays() async {
+        guard let dias = membership.diasRestantes, dias > 0 else { return }
+
+        isDirectActivating = true
+
+        await manager.reactivateMembershipPreservingDays(
+            membershipId: membership.id,
+            userEmail: membership.email
+        )
+
+        try? await Task.sleep(nanoseconds: 1_000_000_000)
+        isDirectActivating = false
+    }
+}
 
     struct DetailedTransactionRow: View {
         let transaction: TransactionData

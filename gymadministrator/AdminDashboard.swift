@@ -7,11 +7,13 @@
 
 import SwiftUI
 import FirebaseAuth
+import FirebaseFirestore
 
 struct AdminDashboard: View {
     @EnvironmentObject var authManager: AuthManager
     @State private var showingProfile = false
     @State private var showingDeleteAlert = false
+    @StateObject private var adminListManager = AdminListManager()
     
     var body: some View {
         NavigationView {
@@ -25,7 +27,11 @@ struct AdminDashboard: View {
                     
                     // Grid de funciones principales
                     AdminFunctionsGrid()
-                    
+
+                    // Tabla de administradores con ocupaciones
+                    AdminOccupationsTable()
+                        .environmentObject(adminListManager)
+
                     Spacer(minLength: 20)
                 }
                 .padding()
@@ -55,6 +61,11 @@ struct AdminDashboard: View {
                 }
             }
         }
+        .onAppear {
+            Task {
+                await adminListManager.loadAdministrators()
+            }
+        }
         .sheet(isPresented: $showingProfile) {
             AdminProfileView()
                 .environmentObject(authManager)
@@ -74,15 +85,15 @@ struct AdminDashboard: View {
 
 struct WelcomeHeader: View {
     @EnvironmentObject var authManager: AuthManager
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 5) {
                     Text("¡Bienvenido!")
                         .font(.title2)
                         .fontWeight(.bold)
-                    
+
                     if let displayName = authManager.user?.displayName, !displayName.isEmpty {
                         Text(displayName)
                             .font(.title3)
@@ -92,10 +103,21 @@ struct WelcomeHeader: View {
                             .font(.subheadline)
                             .foregroundColor(.secondary)
                     }
+
+                    // Mostrar ocupación debajo del nombre
+                    if !authManager.userOccupation.isEmpty {
+                        HStack(spacing: 4) {
+                            Image(systemName: "briefcase.fill")
+                                .font(.caption)
+                            Text(authManager.userOccupation)
+                                .font(.caption)
+                        }
+                        .foregroundColor(.secondary)
+                    }
                 }
-                
+
                 Spacer()
-                
+
                 Image(systemName: "dumbbell.fill")
                     .font(.system(size: 40))
                     .foregroundColor(.blue)
@@ -195,10 +217,8 @@ struct AdminFunctionCard: View {
     let function: AdminFunction
     
     var body: some View {
-        Button(action: {
-            // Aquí navegarías a la vista específica
-            print("Navegando a: \(function.destination)")
-        }) {
+
+        NavigationLink(destination: destinationView) {
             VStack(spacing: 12) {
                 Image(systemName: function.icon)
                     .font(.system(size: 30))
@@ -219,55 +239,165 @@ struct AdminFunctionCard: View {
         }
         .buttonStyle(PlainButtonStyle())
     }
+    
+    @ViewBuilder
+    private var destinationView: some View {
+        switch function.destination {
+        case "members":
+            MiembrosListView()
+        default:
+            Text("Función \(function.title) en construcción")
+                .font(.title)
+                .foregroundColor(.gray)
+        }
+    }
+    }
 }
 
 struct AdminProfileView: View {
     @EnvironmentObject var authManager: AuthManager
     @Environment(\.dismiss) private var dismiss
-    
+    @State private var isEditingOccupation = false
+    @State private var newOccupation = ""
+    @State private var showingSaveAlert = false
+
+    let occupations = [
+        "Administrador",
+        "Gerente",
+        "Entrenador Personal",
+        "Recepcionista",
+        "Nutricionista",
+        "Fisioterapeuta",
+        "Instructor",
+        "Otro"
+    ]
+
     var body: some View {
         NavigationView {
-            VStack(spacing: 20) {
-                // Avatar
-                Image(systemName: "person.circle.fill")
-                    .font(.system(size: 80))
-                    .foregroundColor(.blue)
-                
-                // Información del usuario
-                VStack(spacing: 10) {
-                    if let displayName = authManager.user?.displayName, !displayName.isEmpty {
-                        Text(displayName)
-                            .font(.title2)
-                            .fontWeight(.bold)
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Avatar
+                    Image(systemName: "person.circle.fill")
+                        .font(.system(size: 80))
+                        .foregroundColor(.blue)
+
+                    // Información del usuario
+                    VStack(spacing: 10) {
+                        if let displayName = authManager.user?.displayName, !displayName.isEmpty {
+                            Text(displayName)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                        }
+
+                        Text(authManager.user?.email ?? "")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+
+                        Text("Administrador")
+                            .font(.caption)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 4)
+                            .background(Color.blue.opacity(0.2))
+                            .cornerRadius(8)
                     }
-                    
-                    Text(authManager.user?.email ?? "")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    
-                    Text("Administrador")
-                        .font(.caption)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 4)
-                        .background(Color.blue.opacity(0.2))
-                        .cornerRadius(8)
-                }
-                
-                Spacer()
-                
-                // Información adicional
-                VStack(alignment: .leading, spacing: 15) {
-                    ProfileInfoRow(title: "Usuario ID", value: authManager.user?.uid ?? "")
-                    ProfileInfoRow(title: "Email verificado", value: authManager.user?.isEmailVerified == true ? "Sí" : "No")
-                    ProfileInfoRow(title: "Última conexión", value: "Ahora")
+
+                    // Editar ocupación
+                    VStack(alignment: .leading, spacing: 12) {
+                        HStack {
+                            Text("Ocupación")
+                                .font(.headline)
+                            Spacer()
+                            Button(action: {
+                                newOccupation = authManager.userOccupation
+                                isEditingOccupation.toggle()
+                            }) {
+                                Text(isEditingOccupation ? "Cancelar" : "Editar")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                            }
+                        }
+
+                        if isEditingOccupation {
+                            VStack(spacing: 10) {
+                                Menu {
+                                    ForEach(occupations, id: \.self) { occ in
+                                        Button(occ) {
+                                            newOccupation = occ
+                                        }
+                                    }
+                                } label: {
+                                    HStack {
+                                        Text(newOccupation.isEmpty ? "Selecciona tu ocupación" : newOccupation)
+                                            .foregroundColor(newOccupation.isEmpty ? .gray : .primary)
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                                        Image(systemName: "chevron.down")
+                                            .font(.caption)
+                                            .foregroundColor(.gray)
+                                    }
+                                    .padding()
+                                    .background(Color.gray.opacity(0.1))
+                                    .cornerRadius(12)
+                                }
+
+                                Button(action: {
+                                    Task {
+                                        let success = await authManager.updateOccupation(occupation: newOccupation)
+                                        if success {
+                                            isEditingOccupation = false
+                                            showingSaveAlert = true
+                                        }
+                                    }
+                                }) {
+                                    HStack {
+                                        if authManager.isLoading {
+                                            ProgressView()
+                                                .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                                .scaleEffect(0.8)
+                                        } else {
+                                            Text("Guardar")
+                                        }
+                                    }
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.blue)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                                }
+                                .disabled(authManager.isLoading || newOccupation.isEmpty)
+                            }
+                        } else {
+                            HStack {
+                                Image(systemName: "briefcase.fill")
+                                    .foregroundColor(.gray)
+                                Text(authManager.userOccupation.isEmpty ? "No especificada" : authManager.userOccupation)
+                                    .foregroundColor(authManager.userOccupation.isEmpty ? .secondary : .primary)
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(12)
+                        }
+                    }
+                    .padding()
+                    .background(Color.white)
+                    .cornerRadius(12)
+                    .shadow(color: Color.black.opacity(0.05), radius: 5, x: 0, y: 2)
+
+                    // Información adicional
+                    VStack(alignment: .leading, spacing: 15) {
+                        ProfileInfoRow(title: "Usuario ID", value: authManager.user?.uid ?? "")
+                        ProfileInfoRow(title: "Email verificado", value: authManager.user?.isEmailVerified == true ? "Sí" : "No")
+                        ProfileInfoRow(title: "Última conexión", value: "Ahora")
+                    }
+                    .padding()
+                    .background(Color.gray.opacity(0.1))
+                    .cornerRadius(12)
+
+                    Spacer(minLength: 20)
                 }
                 .padding()
-                .background(Color.gray.opacity(0.1))
-                .cornerRadius(12)
-                
-                Spacer()
             }
-            .padding()
             .navigationTitle("Perfil")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -276,6 +406,11 @@ struct AdminProfileView: View {
                         dismiss()
                     }
                 }
+            }
+            .alert("Ocupación actualizada", isPresented: $showingSaveAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Tu ocupación ha sido actualizada exitosamente")
             }
         }
     }
@@ -297,6 +432,186 @@ struct ProfileInfoRow: View {
                 .font(.subheadline)
                 .fontWeight(.medium)
         }
+    }
+}
+
+// MARK: - Admin Data Model
+struct AdminData: Identifiable {
+    let id: String
+    let email: String
+    let displayName: String
+    let ocupacion: String
+    let createdAt: Date
+}
+
+// MARK: - Admin List Manager
+@MainActor
+class AdminListManager: ObservableObject {
+    @Published var administrators: [AdminData] = []
+    @Published var isLoading = false
+    @Published var errorMessage = ""
+
+    private let db = Firestore.firestore()
+
+    func loadAdministrators() async {
+        isLoading = true
+        errorMessage = ""
+
+        do {
+            let snapshot = try await db.collection("administrators")
+                .order(by: "createdAt", descending: true)
+                .getDocuments()
+
+            administrators = snapshot.documents.compactMap { doc in
+                let data = doc.data()
+                return AdminData(
+                    id: doc.documentID,
+                    email: data["email"] as? String ?? "",
+                    displayName: data["displayName"] as? String ?? "",
+                    ocupacion: data["ocupacion"] as? String ?? "No especificada",
+                    createdAt: (data["createdAt"] as? Timestamp)?.dateValue() ?? Date()
+                )
+            }
+
+            print("✅ Cargados \(administrators.count) administradores")
+        } catch {
+            errorMessage = "Error al cargar administradores: \(error.localizedDescription)"
+            print("❌ Error: \(errorMessage)")
+        }
+
+        isLoading = false
+    }
+}
+
+// MARK: - Admin Occupations Table
+struct AdminOccupationsTable: View {
+    @EnvironmentObject var adminListManager: AdminListManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            // Header
+            HStack {
+                Image(systemName: "person.3.fill")
+                    .foregroundColor(.blue)
+                Text("Administradores y Ocupaciones")
+                    .font(.headline)
+                    .fontWeight(.bold)
+
+                Spacer()
+
+                if adminListManager.isLoading {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                }
+            }
+
+            // Tabla
+            if adminListManager.administrators.isEmpty {
+                HStack {
+                    Spacer()
+                    VStack(spacing: 10) {
+                        Image(systemName: "person.crop.circle.badge.questionmark")
+                            .font(.system(size: 40))
+                            .foregroundColor(.gray)
+                        Text("No hay administradores registrados")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.vertical, 40)
+                    Spacer()
+                }
+            } else {
+                VStack(spacing: 0) {
+                    // Header de la tabla
+                    HStack {
+                        Text("Nombre")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Text("Email")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        Text("Ocupación")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .padding()
+                    .background(Color.blue.opacity(0.1))
+
+                    Divider()
+
+                    // Filas de la tabla
+                    ForEach(adminListManager.administrators) { admin in
+                        VStack(spacing: 0) {
+                            HStack(alignment: .top, spacing: 12) {
+                                // Nombre
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(admin.displayName.isEmpty ? "Sin nombre" : admin.displayName)
+                                        .font(.subheadline)
+                                        .fontWeight(.medium)
+                                        .lineLimit(2)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                // Email
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(admin.email)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .lineLimit(2)
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                // Ocupación
+                                VStack(alignment: .leading, spacing: 4) {
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "briefcase.fill")
+                                            .font(.caption2)
+                                            .foregroundColor(.blue)
+                                        Text(admin.ocupacion)
+                                            .font(.caption)
+                                            .foregroundColor(.primary)
+                                            .lineLimit(2)
+                                    }
+                                }
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .padding()
+
+                            if admin.id != adminListManager.administrators.last?.id {
+                                Divider()
+                            }
+                        }
+                    }
+                }
+                .background(Color.white)
+                .cornerRadius(12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                )
+            }
+
+            // Error message
+            if !adminListManager.errorMessage.isEmpty {
+                HStack {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.red)
+                    Text(adminListManager.errorMessage)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                }
+                .padding(.top, 5)
+            }
+        }
+        .padding(.vertical, 10)
     }
 }
 

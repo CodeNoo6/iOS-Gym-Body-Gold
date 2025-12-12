@@ -29,6 +29,7 @@ struct Miembro: Identifiable, Codable {
     let estatura: Double
     let cedula: String
     let activo: Bool
+    let ocupacion: String?
     
     init(
         idMiembro: Int = 0,
@@ -46,7 +47,8 @@ struct Miembro: Identifiable, Codable {
         peso: Double,
         estatura: Double,
         cedula: String,
-        activo: Bool = true
+        activo: Bool = true,
+        ocupacion: String? = nil
     ) {
         self.idMiembro = idMiembro
         self.idTipoDocumento = idTipoDocumento
@@ -64,6 +66,7 @@ struct Miembro: Identifiable, Codable {
         self.estatura = estatura
         self.cedula = cedula
         self.activo = activo
+        self.ocupacion = ocupacion
     }
     
     var nombreCompleto: String {
@@ -114,6 +117,7 @@ struct Membresia: Identifiable, Codable {
     let precio: Double
     let activa: Bool
     let diasRestantes: Int?
+    let ocupacion: String?
     
     var estadoDescripcion: String {
         if let dias = diasRestantes {
@@ -210,7 +214,8 @@ class MiembroManager: ObservableObject {
                 "peso": miembro.peso,
                 "estatura": miembro.estatura,
                 "cedula": miembro.cedula,
-                "activo": miembro.activo
+                "activo": miembro.activo,
+                "ocupacion": miembro.ocupacion ?? ""
             ]
             
             try await db.collection("miembros").addDocument(data: miembroData)
@@ -248,7 +253,8 @@ class MiembroManager: ObservableObject {
                 "peso": miembro.peso,
                 "estatura": miembro.estatura,
                 "cedula": miembro.cedula,
-                "activo": miembro.activo
+                "activo": miembro.activo,
+                "ocupacion": miembro.ocupacion ?? ""
             ]
             
             try await db.collection("miembros").document(documentId).updateData(miembroData)
@@ -296,7 +302,10 @@ class MiembroManager: ObservableObject {
             miembro.nombre.localizedCaseInsensitiveContains(query) ||
             miembro.apellido.localizedCaseInsensitiveContains(query) ||
             miembro.email.localizedCaseInsensitiveContains(query) ||
-            miembro.numeroDocumento.localizedCaseInsensitiveContains(query)
+            miembro.apellido.localizedCaseInsensitiveContains(query) ||
+            miembro.email.localizedCaseInsensitiveContains(query) ||
+            miembro.numeroDocumento.localizedCaseInsensitiveContains(query) ||
+            (miembro.ocupacion ?? "").localizedCaseInsensitiveContains(query)
         }
     }
     
@@ -448,7 +457,10 @@ class MembresiaManager: ObservableObject {
                 "fechaVencimiento": membresia.fechaVencimiento,
                 "precio": membresia.precio,
                 "activa": membresia.activa,
-                "diasRestantes": membresia.diasRestantes ?? 0
+                "precio": membresia.precio,
+                "activa": membresia.activa,
+                "diasRestantes": membresia.diasRestantes ?? 0,
+                "ocupacion": membresia.ocupacion ?? ""
             ]
             
             try await db.collection("membresias").addDocument(data: membresiaData)
