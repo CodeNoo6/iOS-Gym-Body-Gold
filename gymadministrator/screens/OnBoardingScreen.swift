@@ -69,7 +69,7 @@ class OnboardingManager: ObservableObject {
     
     let onboardingPages = [
         OnboardingPage(
-            title: "Bienvenido a Gym Body Gold",
+            title: "Bienvenido a The Brother's Gym",
             subtitle: "Entrena como nunca antes",
             icon: "bodyGoldLogo",
             description: "Clases exclusivas y todo lo que necesitas para alcanzar tus objetivos.",
@@ -401,7 +401,7 @@ struct OnboardingPageView: View {
     // Función para obtener características - INCLUYE GYMIUS
     private func getFeaturesForPage(_ page: OnboardingPage) -> [(icon: String, text: String)]? {
         switch page.title {
-        case "Bienvenido a Gym Body Gold":
+        case "Bienvenido a The Brother's Gym":
             return [
                 (icon: "star.fill", text: "Equipos de última generación"),
                 (icon: "heart.fill", text: "Ambiente motivador"),
@@ -470,23 +470,29 @@ struct WelcomeLogoDesign: View {
                         ),
                         lineWidth: 2
                     )
-                    .frame(width: CGFloat(130 + index * 15), height: CGFloat(130 + index * 15))
+                    .frame(width: CGFloat(185 + index * 15), height: CGFloat(185 + index * 15))
                     .scaleEffect(isAnimating ? 1.05 : 1.0)
                     .opacity(0.6)
             }
-            
+
             // Logo principal
             ZStack {
+                Circle()
+                    .fill(Color.black)
+                    .frame(width: 170, height: 170)
+
                 Image("bodyGoldLogo")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 120, height: 120)
+                    .frame(width: 170, height: 170)
+                    .clipShape(Circle())
                     .brandGlow()
-                
+
                 Image("bodyGoldLogo")
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(width: 120, height: 120)
+                    .frame(width: 170, height: 170)
+                    .clipShape(Circle())
             }
             .scaleEffect(isAnimating ? 1.05 : 1.0)
         }
@@ -1442,7 +1448,7 @@ struct GymiusIntroView: View {
                         .foregroundColor(.brandGold)
                         .multilineTextAlignment(.center)
                     
-                    Text("Gymius es la primera IA especializada en fitness que te acompañará en cada paso de tu transformación. Diseñada específicamente para Gym Body Gold.")
+                    Text("Gymius es la primera IA especializada en fitness que te acompañará en cada paso de tu transformación. Diseñada específicamente para The Brother's Gym.")
                         .font(.body)
                         .foregroundColor(.brandLight.opacity(0.9))
                         .multilineTextAlignment(.center)

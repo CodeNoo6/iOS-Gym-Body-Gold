@@ -9,7 +9,7 @@ import Foundation
 import SwiftUI
 
 extension Color {
-    // Colores principales de Gym Body Gold
+    // Colores principales de The Brother's Gym
     static let brandGold = Color(red: 1.0, green: 0.75, blue: 0.2)      // #FFBF33 - Dorado principal
     static let brandDark = Color(red: 0.15, green: 0.15, blue: 0.15)    // #262626 - Gris oscuro
     static let brandAccent = Color(red: 1.0, green: 0.65, blue: 0.1)    // #FFA619 - Naranja intenso
@@ -273,13 +273,15 @@ struct LogoWithGlow: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 100, height: 100)
+                .clipShape(Circle())
                 .brandGlow()
-            
+
             // Logo principal
             Image("bodyGoldLogo")
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 100, height: 100)
+                .clipShape(Circle())
         }
         .scaleEffect(1.05)
     }
@@ -290,7 +292,7 @@ struct TitleSection: View {
     
     var body: some View {
         VStack(spacing: 8) {
-            Text("Gym Body Gold")
+            Text("The Brother's Gym")
                 .font(.system(size: 32, weight: .bold, design: .rounded))
                 .foregroundColor(.brandGold)
             

@@ -35,7 +35,7 @@ final class OllamaStreamer: NSObject, ObservableObject, URLSessionDataDelegate {
         
         // Prompt más conciso y directo
         let optimizedPrompt = """
-        Eres Gymius, asistente de Gym Body Gold. Responde sobre fitness, ejercicios y nutrición.
+        Eres Gymius, asistente de The Brother's Gym. Responde sobre fitness, ejercicios y nutrición.
         
         \(prompt)
         """
@@ -189,7 +189,7 @@ final class OllamaStreamer: NSObject, ObservableObject, URLSessionDataDelegate {
 struct IAChatCard: View {
     @State private var inputText = ""
     @State private var messages: [(text: String, isUser: Bool)] = [
-        (text: "💛 ¡Hola! Soy Gymius, tu asistente personal en Gym Body Gold. ¿En qué puedo ayudarte hoy?", isUser: false)
+        (text: "💛 ¡Hola! Soy Gymius, tu asistente personal en The Brother's Gym. ¿En qué puedo ayudarte hoy?", isUser: false)
     ]
     @State private var isLoading = false
     @State private var isExpanded = false
@@ -387,7 +387,7 @@ struct IAChatCard: View {
         
         // ✅ CONTEXTO MEJORADO PARA GYMIUS
         let gymContext = """
-        Eres Gymius, el asistente IA especializado de Gym Body Gold. Tu trabajo es ayudar con:
+        Eres Gymius, el asistente IA especializado de The Brother's Gym. Tu trabajo es ayudar con:
         - Rutinas de ejercicios
         - Consejos de nutrición deportiva
         - Técnicas de entrenamiento
@@ -506,13 +506,13 @@ struct IAChatCard: View {
         var defaultTitle: String {
             switch self {
             case .general:
-                return "📢 Información Importante - Gym Body Gold"
+                return "📢 Información Importante - The Brother's Gym"
             case .promotion:
-                return "🏷️ ¡Oferta Especial en Gym Body Gold!"
+                return "🏷️ ¡Oferta Especial en The Brother's Gym!"
             case .maintenance:
                 return "🔧 Mantenimiento Programado"
             case .event:
-                return "🎉 Nuevo Evento en Gym Body Gold"
+                return "🎉 Nuevo Evento en The Brother's Gym"
             case .motivation:
                 return "💪 ¡Mantente Motivado!"
             case .health:
@@ -529,7 +529,7 @@ struct IAChatCard: View {
             case .maintenance:
                 return "Informamos que habrá mantenimiento programado. Consulta los horarios disponibles."
             case .event:
-                return "¡Tenemos un nuevo evento emocionante! Únete y vive la experiencia Gym Body Gold."
+                return "¡Tenemos un nuevo evento emocionante! Únete y vive la experiencia The Brother's Gym."
             case .motivation:
                 return "¡Sigue adelante! Cada día es una oportunidad para ser mejor. ¡Tú puedes!"
             case .health:
@@ -799,7 +799,7 @@ struct IAChatCard: View {
                     HStack {
                         Image(systemName: "bell.fill")
                             .foregroundColor(.brandGold)
-                        Text("Gym Body Gold")
+                        Text("The Brother's Gym")
                             .font(.caption)
                             .foregroundColor(.brandLight.opacity(0.7))
                         Spacer()
@@ -1185,7 +1185,7 @@ struct IAChatCard: View {
             case .paymentReminder:
                 return "💳 Recordatorio de Pago"
             case .welcomeMessage:
-                return "🏋️‍♂️ ¡Bienvenido a Gym Body Gold!"
+                return "🏋️‍♂️ ¡Bienvenido a The Brother's Gym!"
             }
         }
         
@@ -2552,7 +2552,7 @@ struct IAChatCard: View {
                 }
                 
                 let title = "⏰ Membresía Expirada"
-                let body = "Hola \(userName), tu membresía ha expirado. Renueva para seguir entrenando en Gym Body Gold."
+                let body = "Hola \(userName), tu membresía ha expirado. Renueva para seguir entrenando en The Brother's Gym."
                 
                 await FCMNotificationManager.shared.sendNotificationToUser(
                     userId: userUID,
@@ -5733,7 +5733,7 @@ private extension EnhancedMembershipRow {
                         Color.clear.frame(height: 20)
                     }
                 }
-                .navigationTitle("Gym Body Gold")
+                .navigationTitle("The Brother's Gym")
                 .navigationBarTitleDisplayMode(.large)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarTrailing) {
@@ -5779,7 +5779,7 @@ private extension EnhancedMembershipRow {
                     Color.clear.frame(height: 20)
                 }
             }
-            .navigationTitle("Gym Body Gold")
+            .navigationTitle("The Brother's Gym")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {

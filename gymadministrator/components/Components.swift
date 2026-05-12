@@ -63,10 +63,16 @@ struct HeaderCard: View {
                 
                 Spacer()
                 
-                Image("bodyGoldLogo")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 60, height: 60)
+                ZStack {
+                    Circle()
+                        .fill(Color.black)
+                        .frame(width: 72, height: 72)
+                    Image("bodyGoldLogo")
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: 72, height: 72)
+                        .clipShape(Circle())
+                }
             }
         }
         .padding()

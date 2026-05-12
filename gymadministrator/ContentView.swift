@@ -50,7 +50,7 @@ struct LoadingView: View {
                     .scaleEffect(isAnimating ? 1.2 : 1.0)
                     .animation(.easeInOut(duration: 1.5).repeatForever(autoreverses: true), value: isAnimating)
                 
-                Text("Gym Body Gold")
+                Text("The Brother's Gym")
                     .font(.title2)
                     .fontWeight(.bold)
                     .foregroundColor(.brandLight)

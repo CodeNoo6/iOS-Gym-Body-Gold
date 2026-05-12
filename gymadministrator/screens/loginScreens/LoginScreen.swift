@@ -1044,7 +1044,7 @@ class AuthManager: ObservableObject {
         let payload: [String: Any] = [
             "to": token,
             "notification": [
-                "title": "🏋️‍♂️ ¡Bienvenido a Gym Body Gold!",
+                "title": "🏋️‍♂️ ¡Bienvenido a The Brother's Gym!",
                 "body": "¡Hola \(userName)! Tu cuenta ha sido creada exitosamente. ¡Estamos emocionados de tenerte en nuestra familia fitness!",
                 "sound": "default",
                 "badge": 1

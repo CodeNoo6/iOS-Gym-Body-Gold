@@ -298,7 +298,7 @@ class PaymentReminderManager: NSObject, ObservableObject {
         
         // Crear contenido de la notificación
         let content = UNMutableNotificationContent()
-        content.title = "💳 ¡Pago Pendiente - Gym Body Gold!"
+        content.title = "💳 ¡Pago Pendiente - The Brother's Gym!"
         content.body = "Tu membresía \(reminder.tipoMembresia) vence mañana. Renueva por $\(Int(reminder.precio).formatted()) para continuar entrenando."
         content.sound = .default
         content.badge = 1
@@ -335,7 +335,7 @@ class PaymentReminderManager: NSObject, ObservableObject {
         
         // Crear contenido de la notificación
         let content = UNMutableNotificationContent()
-        content.title = "⚠️ ¡Último Día - Gym Body Gold!"
+        content.title = "⚠️ ¡Último Día - The Brother's Gym!"
         content.body = "Tu membresía \(reminder.tipoMembresia) vence HOY. Renueva urgentemente por $\(Int(reminder.precio).formatted())."
         content.sound = .default
         content.badge = 1
@@ -406,7 +406,7 @@ class PaymentReminderManager: NSObject, ObservableObject {
     // MARK: - Función manual para testing
     func testPaymentNotification() async {
         let testContent = UNMutableNotificationContent()
-        testContent.title = "🧪 Test - Gym Body Gold"
+        testContent.title = "🧪 Test - The Brother's Gym"
         testContent.body = "Esta es una notificación de prueba del sistema de recordatorios de pago."
         testContent.sound = .default
         testContent.badge = 1
